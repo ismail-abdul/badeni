@@ -5,6 +5,7 @@
 
 # Installation
 1.  Clone the project into your  directory. 
+2. Install [FFmpeg](https://ffmpeg.org/) for your appropriate OS. 
 2. Set up  and env file containing you r server id and the bot token.
 3. Activate the virtual environment with the relevant command for your operating system.
 	e.g  `venv/Scripts/activate` with Powershell on Windows.
@@ -12,6 +13,6 @@
 
 
 Goals
-- [] local database of music for server-specific cases
-- [] scrape audio from Youtube and SoundCloud APIs within the limts
-- [] host application on cloud servers
+ - [  ] local database of music for server-specific cases
+ - [  ] request audio from Youtube and SoundCloud APIs
+ - [  ] 

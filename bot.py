@@ -92,18 +92,30 @@ async def test_play(interaction: nextcord.Interaction):
         await interaction.send("the user is not in a channel rn")
     elif (botChannel == userChannel):
         # Create audio source
-        buffer: io.BufferedIOBase = None
         fp = r'C:\Users\Abdul\OneDrive\Documents\Discord Bots\stiff\media\tester.mp3'
         with open(fp, 'rb') as file:
-            buffer = io.BufferedIOBase(file)
             source = nextcord.FFmpegPCMAudio(source=fp)
-            
-            # Test audio
             botVoiceClient.play(source=source, after=streamEndsOrError)
             await interaction.send("planning to play audio")
     else:
         await interaction.send("wrong channel buddy")
     # Fetch the data to be played.
+
+
+@bot.slash_command(description="Pauses playback.", guild_ids=[TESTING_GUILD_ID])
+async def test_pause(interaction: nextcord.Interaction):
+    global botVoiceClient
+
+    botVoiceClient.pause()
+    await interaction.send("pausing it now")
+
+@bot.slash_command(description="Pauses badeni", guild_ids=[TESTING_GUILD_ID])
+async def test_resume(interaction: nextcord.Interaction):
+    global botVoiceClient
+    botVoiceClient.resume()
+    await interaction.send("resuming now")
+
+    
     
 # Called when a stream ends or an error occurs.
 async def streamEndsOrError(error):

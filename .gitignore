@@ -1,3 +1,6 @@
 .env
 *.mp3
 .gitignore
+planning/
+executables/
+media/

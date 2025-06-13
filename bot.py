@@ -3,9 +3,7 @@ from nextcord.ext import commands
 import dotenv
 import logging
 import random
-import discord
-import io
-
+import yt_dlp
 
 # Logging
 logger = logging.getLogger('nextcord')
@@ -21,11 +19,11 @@ token = config['DISCORD_BOT_TOKEN']
 TESTING_GUILD_ID = int(config['TESTING_GUILD_ID'])  # Make sure this is an int
 
 # Bot & gateway intents setup.
-intents = discord.Intents.default()
+intents = nextcord.Intents.default()
 bot = commands.Bot(intents=intents)
 
 #Assign variable for the channel connection.
-botVoiceClient: nextcord.VoiceClient = None
+botVoiceClient: nextcord.VoiceClient | None = None
 
 @bot.event
 async def on_ready():
@@ -48,7 +46,7 @@ async def roll(
     await interaction.send(f"🎲 You rolled a **{result}** (from {minimum} to {maximum})")
 
 
-@bot.slash_command(name="join", description="Join current voice channel", guild_ids=[TESTING_GUILD_ID])
+@bot.slash_command(name="join", description="Join current voice channel", guild_ids=[])
 async def join(interaction: nextcord.Interaction):
     global botVoiceClient
 
@@ -63,19 +61,28 @@ async def join(interaction: nextcord.Interaction):
 
         await interaction.send("should join now")
 
-@bot.slash_command(name="leave", description="Leave the current voice channel.", guild_ids=[TESTING_GUILD_ID])
+@bot.slash_command(name="leave", description="Leave the current voice channel.", guild_ids=[])
 async def leave(interaction: nextcord.Interaction):
+    global botVoiceClient
+    
     channel = interaction.user.voice.channel
     if (channel.type != None):
-        await interaction.guild.voice_client.disconnect()
+        await botVoiceClient.disconnect(force=True)
+        botVoiceClient = None
         await interaction.send("bot has left")
     else:
         await interaction.send("you are not in a voice channel")
 
+@bot.slash_command(description="tests for soundcloud fetching", guild_ids=[])
+async def test_ytdlp_play(interaction: nextcord.Interaction):
+    global botVoiceClient
+    await interaction.send("playing sc audio")
+
+
 # Plays a song at a given link. Runs through entire song. Only works for local files
 # link: String = nextCord.SlashOption(description="link")
 
-@bot.slash_command(description="Test for playing audio successfully", guild_ids=[TESTING_GUILD_ID])
+@bot.slash_command(description="Testing for attempt to play audio successfully", guild_ids=[TESTING_GUILD_ID])
 async def test_play(interaction: nextcord.Interaction):
     #identify user and channel.
     global botVoiceClient
@@ -93,8 +100,9 @@ async def test_play(interaction: nextcord.Interaction):
     elif (botChannel == userChannel):
         # Create audio source
         fp = r'C:\Users\Abdul\OneDrive\Documents\Discord Bots\stiff\media\tester.mp3'
-        with open(fp, 'rb') as file:
-            source = nextcord.FFmpegPCMAudio(source=fp)
+        fp2 = r'C:\Users\Abdul\OneDrive\Documents\Discord Bots\stiff\media\Skepta x Smooth Soul 2 [K5Ywq18TeVA].webm'
+        with open(fp2, 'rb') as file:
+            source = nextcord.FFmpegPCMAudio(source=fp2)
             botVoiceClient.play(source=source, after=streamEndsOrError)
             await interaction.send("planning to play audio")
     else:
@@ -119,12 +127,13 @@ async def test_resume(interaction: nextcord.Interaction):
     
 # Called when a stream ends or an error occurs.
 async def streamEndsOrError(error):
-    botVoiceClient.disconnect()
+    global botVoiceClient
+    await botVoiceClient.disconnect()
     botVoiceClient = None
 
 
 # hello command
-@bot.slash_command(description="My first slash command.", guild_ids=[TESTING_GUILD_ID])
+@bot.slash_command(description="My first slash command.", guild_ids=[])
 async def hello(interaction: nextcord.Interaction):
     await interaction.send("Hello!")
 

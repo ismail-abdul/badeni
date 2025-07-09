@@ -36,7 +36,7 @@ async def on_ready():
     connections = bot.voice_clients
 
     for vc in connections:
-        await vc.disconnect(force=True)
+        await vc.disconnect(forcgit ade=True)
     
     print(f'We have logged in as {bot.user}')
 

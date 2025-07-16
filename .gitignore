@@ -6,3 +6,4 @@ executables/
 media/
 venv/
 .gitignore
+__pycache__ # Used to store module bytecode for speedier execution.

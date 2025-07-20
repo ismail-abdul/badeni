@@ -5,11 +5,13 @@ import dotenv
 import logging
 import random
 import subprocess
-# import yt_dlp
+from asyncio import sleep
+from Queue import Queue
+from QueueNode import QueueNode
 
 # Logging
 logger = logging.getLogger('nextcord')
-logger.setLevel(logging.ERROR)
+logger.setLevel(logging.WARNING)
 handler = logging.FileHandler(filename='nextcord.log', encoding='utf-8', mode='w')
 handler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s'))
 logger.addHandler(handler)
@@ -28,7 +30,7 @@ intents = nextcord.Intents.default()
 bot = commands.Bot(intents=intents)
 
 # Assign variable for queue.
-queue: list[FFmpegOpusAudio | FFmpegPCMAudio] = []
+queue: Queue = Queue(limit=20)
 
 
 #======================== Intitial Commands ================================#
@@ -68,7 +70,7 @@ async def on_voice_state_update(member: Member, before: VoiceState, after: Voice
     elif not member.voice.channel: # Is the bot even in a channel.
         print("Bot isn't in a channel ??? I think...")
         return
-    elif before.channel == None: # Is it a join event.
+    elif before.channel == None and after.channel != None: # Is it a join event.
         print("Bot is just joining")
         return
     elif before.channel == after.channel: # Is it just a reconnection thing?
@@ -111,29 +113,57 @@ async def join(interaction: Interaction):
     botVoiceClient: VoiceClient | None = interaction.guild.voice_client # type: ignore
     userVoiceState = interaction.user.voice
 
+    print(f"Active voice clients: {bot.voice_clients}")
+    for vc in bot.voice_clients:
+        print('Disconnecting old voice clients')
+        await vc.disconnect(force=True)
 
     if (userVoiceState == None):
         await interaction.followup.send("not in a voice channel")
+        return 
     elif (botVoiceClient and botVoiceClient.channel == userVoiceState.channel):
         # What if you don't want users to move the bot relentessly
-        await interaction.followup.send("bot already connected to this channel") 
-    else:
-        channel = userVoiceState.channel
-        # I think <timeout> controls how long it takes for the bot to disconnect due to inactivity.
-        await channel.connect(reconnect=True) 
-        await interaction.followup.send("should join now")
+        await interaction.followup.send("bot already connected to this channel")
+        return
+
+    channel = userVoiceState.channel
+    # I think <timeout> controls how long it takes for the bot to disconnect due to inactivity.
+    try:
+        await channel.connect(reconnect=False, timeout=10) #type: ignore
+    except Exception as exception:
+        vc = interaction.guild.voice_client # type: ignore
+        if vc: 
+            print("Error in connecting to channel. Disconnecting guild's voice client.")
+            await vc.disconnect(force=True)
+
+        await interaction.followup.send("Error in joining")
+        print(exception)
+        return
+    
+    await interaction.followup.send("should join now")
 
 # Need to add null_safety.
 @bot.slash_command(name="leave", description="Leave the current voice channel.", guild_ids=[])
-async def leave(interaction: Interaction):
-    # Also need to clear the queue in this case.
-    vc = interaction.guild.voice_client 
-    channel = interaction.user.voice.channel
-    if (channel.type != None):
+async def leave(interaction: Interaction):    
+    try:
+        # Also need to clear the queue in this case.
+        vc = interaction.guild.voice_client # vc will always be used for a VoiceCLeint object. Not a voice channel.
         await vc.disconnect(force=True)
+        global queue
+        queue.clear()
         await interaction.send("bot has left")
-    else:
-        await interaction.send("you are not in a voice channel") 
+    except:
+        if not interaction.guild:
+            await interaction.send("command not sent from a guild")
+        elif not interaction.guild.voice_client:
+            await interaction.send("bot not connected to any voice channels")
+        elif not interaction.user:
+            await interaction.send("command not sent by a user")
+        elif not interaction.user.voice:
+            await interaction.send("you are not in a voice channel")
+    finally:
+        return
+
 
 
 # Called when a stream ends or an error occurs.
@@ -208,7 +238,7 @@ async def test_ytdlp_play(
 
     # Could these calls to get_audio_process be done asyncronosly.
     except subprocess.CalledProcessError: # Alternative enconding URLs
-        forms = ['best', 'aac', 'alac', 'flac', 'm4a', 'mp3', 'vorbis','wav']
+        forms = ['aac', 'alac', 'flac', 'm4a', 'mp3', 'vorbis','wav']
         for form in forms:
             process = get_audio_subprocess(form=form, url=url)
 
@@ -231,34 +261,61 @@ async def test_ytdlp_play(
 
             # Could be multiple types of exceptions occuring
 
+    # Opus Source creation failure
+    except nextcord.ClientException:
+        print("Opus Source creation failed.")
+
     # Could be multiple types of exceptions occuring
     except:
-        print('unknown error occured during Opus URL acquirement')
+        print('unknown error occured during audio URL acquirement')
     
     # Play audio, enqueue or handle error.
     finally:
         if audio_url and source:
-            after = streamEndsOrError2(interaction)
-            vc.play(source=source, after=after)
+            after = await streamEndsOrError2(interaction)
+            global queue
+
+            if queue.isEmpty:
+                vc.play(source=source, after=after)
+                await interaction.followup.send("playing audio now")
+            else:
+                node = QueueNode('None', 0, source)
+                queue.enqueue(node)
+                await interaction.followup.send('Added song to the queue.')
             print(f'source type: {type(source)}')
-            await interaction.followup.send("playing audio now")
         else:
             await interaction.followup.send("badeni couldn't process your request") 
 
 
 @bot.slash_command(description="Pauses playback.", guild_ids=[TESTING_GUILD_ID])
 async def pause(interaction: nextcord.Interaction):
-    global botVoiceClient
-
-    botVoiceClient.pause()
-    await interaction.send("pausing it now")
+    vc = None
+    try:
+        vc = interaction.guild.voice_client
+        vc.pause()
+        await interaction.send("pausing it now")
+    except:
+        if not interaction.guild:
+            await interaction.send("command not sent from a guild")
+        elif not vc:
+            await interaction.send("bot has no voice client for this guild")
+        else:
+            await interaction.send("badeni experienced an unforseen error")
 
 @bot.slash_command(description="Resumes playback", guild_ids=[TESTING_GUILD_ID])
 async def resume(interaction: nextcord.Interaction):
-    global botVoiceClient
-    
-    botVoiceClient.resume()
-    await interaction.send("resuming now")
+    vc = None
+    try:
+        vc = interaction.guild.voice_client
+        vc.resume()
+        await interaction.send("resuming it now")
+    except:
+        if not interaction.guild:
+            await interaction.send("command not sent from a guild")
+        elif not vc:
+            await interaction.send("bot has no voice client for this guild")
+        else:
+            await interaction.send("badeni experienced an unforseen error")
     
 
 # hello command

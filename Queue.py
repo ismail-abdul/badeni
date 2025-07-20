@@ -26,6 +26,10 @@ class Queue:
         else:
             self._limit = limit
 
+    @property
+    def isEmpty(self) -> bool:
+        return len(self.queue)==0
+
     def enqueue(self, node: QueueNode, posi: int = 0) -> IndexError | None :
         if len(self.queue)==10:
             raise IndexError()

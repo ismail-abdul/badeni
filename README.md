@@ -21,8 +21,8 @@ Due to the perpetually changing nature of
 
 
 Goals
-1. - [ ] request audio from Youtube (or other streaming options)
-2. - [ ] queueing up songs, playlists, DJ role
-2. - [ ] create storage solution for a set amount of time. (read up on how large volumes of data are queried with insane speed. What is Elastisearch?)
+1. - [X] request audio from Youtube (or other streaming options)
+2. - [X] queueing up songs, playlists, DJ role
 3. - [ ] modularise and build testing suite for the bot
 4. - [ ] support for sharding
+   - [ ] create storage solution for a set amount of time. (read up on how large volumes of data are queried with insane speed. What is Elastisearch?)

@@ -8,6 +8,7 @@ import subprocess
 from asyncio import sleep
 from Queue import Queue
 from QueueNode import QueueNode
+from typing import Dict
 
 # Logging
 logger = logging.getLogger('nextcord')
@@ -24,6 +25,7 @@ test_guild_id = config["TESTING_GUILD_ID"]
 assert(token != None)
 assert(test_guild_id != None)
 TESTING_GUILD_ID = int(test_guild_id)  # Make sure this is an int
+DEFAULT_PRINT_FIELDS =  ('artist','webpage_url','title')
 
 # Bot & gateway intents setup.
 intents = nextcord.Intents.default()
@@ -353,17 +355,49 @@ async def test_ytdlp_play(
             await interaction.followup.send("badeni couldn't process your request") 
 
 
+'''
 @bot.slash_command(description="Search for songs and play them", guild_ids=[])
-async def yt_search_play(
-    interaction: Interaction,
-    search: str = nextcord.SlashOption(description="search terms", required=True)
-):
+async def yt_search_play(interaction: Interaction,
+                         search: str = nextcord.SlashOption(description="search terms", required=True)
+                         ):
+'''    
+
+@bot.slash_command(description="Get results for a youtube search", guild_ids=[])
+async def test_yt_search(interaction: Interaction,
+                    search_inp: str = nextcord.SlashOption(required=True, name='search', description="Pretend you're searching YT."),
+                    result_count: int = nextcord.SlashOption(required=True, description='Choose x results', min_value=1, max_value=10, default=5)
+                    ):
     # Search youtube with yt_dlp.
+    results: list[Dict[str, str]] | None = None
+    try:
+        await interaction.response.defer(ephemeral=True, with_message=True)
+        results = get_ytsearch_results(result_count=result_count,search_inp=search_inp,) # really should be called asynchronously
+        msg = ''
+        
+        for i in range(len(results)):
+            line = f'{i}. '
+            result = results[i]
+            fields = DEFAULT_PRINT_FIELDS
+            for field in fields:
+                line += f'**{field}**: {result[field]} | '
+            line += '\n'
+            line.removesuffix(' ')
+            msg += line
+        
+        await interaction.send(content=msg) # Replace with embed later on.
+
+    except subprocess.CalledProcessError:
+        await interaction.send("badeni couldn't process the request")
+
+
+
+
     # Send back the search results.
     # Then have user pick a result.
     # Then user that result to get audio url and such. You can prolly just call the url function instead.
     # That way I don't have to handle all the queueing nonsense.
-
+    
+    
 
 @bot.slash_command(description="Pauses playback.", guild_ids=[TESTING_GUILD_ID])
 async def pause(interaction: nextcord.Interaction):

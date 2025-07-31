@@ -8,7 +8,8 @@ import subprocess
 from asyncio import sleep
 from Queue import Queue
 from QueueNode import QueueNode
-from typing import Dict
+from typing import Dict, Union
+import asyncio
 
 # Logging
 logger = logging.getLogger('nextcord')
@@ -35,7 +36,7 @@ bot = commands.Bot(intents=intents)
 queue: Queue = Queue(limit=20)
 
 
-#======================== Intitial Commands ================================#
+#======================== (Webhook) Event Listeners ================================#
 @bot.event
 async def on_ready():
     #Load media files from elsewhere
@@ -89,6 +90,7 @@ async def on_voice_state_update(member: Member, before: VoiceState, after: Voice
     
     print("\n")
 
+# ======================== Basic Commands ======================================== #
 
 # roll command 
 @bot.slash_command(description="Roll a random number between two integers.", guild_ids=[TESTING_GUILD_ID])
@@ -104,7 +106,9 @@ async def roll(
     result = random.randint(minimum, maximum)
     await interaction.send(f"🎲 You rolled a **{result}** (from {minimum} to {maximum})")
 
-
+@bot.slash_command(description="Just like the Linux command, echo whatever you type", guild_ids=[])
+async def echo(interaction: Interaction, q: str = nextcord.SlashOption(name="q", required=True)):
+    await interaction.send(q + ":one:")
 #======================== Connection Commands & Logic ================================#
 
 @bot.slash_command(name="join", description="Join current voice channel", guild_ids=[])
@@ -171,6 +175,7 @@ async def leave(interaction: Interaction):
 # Called when a stream ends or an error occurs.
 # can i pass an interaction? can I edit// override the function to take the interactionn
 # Supply an interaction to the finaliser funciton. I.e when the stream ends or an error occurs.
+# Read https://docs.nextcord.dev/en/stable/faq.html#how-do-i-pass-a-coroutine-to-the-player-s-after-function for info on how to properly do this.
 async def streamEndsOrError2(interaction: Interaction, error: Exception | None = None):
     
     # task/coroutine can be created but not awaited.
@@ -203,6 +208,8 @@ async def streamEndsOrError2(interaction: Interaction, error: Exception | None =
 
 #========================= Initial Playback Commands ================================#
 
+# TODO - make async safe.
+# form - audio-format
 def get_audio_subprocess(form: str, url: str):
     completed_process = subprocess.run(
         args=['yt-dlp.exe', '-x', '-g', '--audio-format', form, url],
@@ -223,6 +230,8 @@ Generates a yt-dlp subprocess that searches Youtube. Then returns the data speci
 @raise subprocess.CalledProcessError if an error occurs within the yt-dlp subprocess
 I wish args and kwargs were ideal here. I want an excuse to use them in a function. 
 Acc I could, but then we taking up double memory unecessarily (asymptotically of course).
+
+TODO - make this asynchronous if possible. i.e. multiple subprocessess
 '''
 def get_ytsearch_results(search_inp: str,
                          result_count: int = 5, 
@@ -354,50 +363,77 @@ async def test_ytdlp_play(
         else:
             await interaction.followup.send("badeni couldn't process your request") 
 
+# TODO - Checks for the type of reaction given to a message (when called). Takes same arguements as the on_reaction_add event.
+def reaction_add_check(reaction, user) -> bool:
+    # TODO - handle reactions to search results messages.
+    # Organic reaction and bot message. Very low integrity. Improve later
+    
+    number_emoji_map = {
+        "1️⃣": 1, "2️⃣": 2, "3️⃣": 3, "4️⃣": 4, "5️⃣": 5,
+        "6️⃣": 6, "7️⃣": 7, "8️⃣": 8, "9️⃣": 9, "🔟": 10
+    }
+    
+    return not( user.bot or (not reaction.message.author.bot) or (not reaction.emoji in number_emoji_map) )
 
-'''
-@bot.slash_command(description="Search for songs and play them", guild_ids=[])
-async def yt_search_play(interaction: Interaction,
-                         search: str = nextcord.SlashOption(description="search terms", required=True)
-                         ):
-'''    
+
 
 @bot.slash_command(description="Get results for a youtube search", guild_ids=[])
-async def test_yt_search(interaction: Interaction,
-                    search_inp: str = nextcord.SlashOption(required=True, name='search', description="Pretend you're searching YT."),
-                    result_count: int = nextcord.SlashOption(required=True, description='Choose x results', min_value=1, max_value=10, default=5)
-                    ):
-    # Search youtube with yt_dlp.
+async def test_yt_search(
+    interaction: Interaction,
+    search_inp: str = nextcord.SlashOption(required=True, name='search', description="Pretend you're searching YT."),
+    result_count: int = nextcord.SlashOption(required=True, description='Choose x results', min_value=1, max_value=10, default=5)
+):
+    
     results: list[Dict[str, str]] | None = None
     try:
-        await interaction.response.defer(ephemeral=True, with_message=True)
+        await interaction.response.defer(ephemeral=False, with_message=True)
         results = get_ytsearch_results(result_count=result_count,search_inp=search_inp,) # really should be called asynchronously
-        msg = ''
+        content = ''
         
         for i in range(len(results)):
             line = f'{i}. '
             result = results[i]
-            fields = DEFAULT_PRINT_FIELDS
-            for field in fields:
+            for field in DEFAULT_PRINT_FIELDS:
                 line += f'**{field}**: {result[field]} | '
             line += '\n'
             line.removesuffix(' ')
-            msg += line
+            content += line
         
-        await interaction.send(content=msg) # Replace with embed later on.
+        message = await interaction.send(content=content) # Replace with embed later on.
+                
+        try:
+            reaction, user = await bot.wait_for(event='reaction_add', check=reaction_add_check, timeout=30.0)
+            number_emoji_map = {
+                "1️⃣": 1, "2️⃣": 2, "3️⃣": 3, "4️⃣": 4, "5️⃣": 5,
+                "6️⃣": 6, "7️⃣": 7, "8️⃣": 8, "9️⃣": 9, "🔟": 10
+            }
+            if reaction.emoji in number_emoji_map and 0 < number_emoji_map[reaction.emoji] and number_emoji_map[reaction.emoji] <= result_count:
+                num = number_emoji_map[reaction.emoji] - 1
+                result = results[num-1] 
+                webpage_url = result['webpage_url'] # same fields as JSON data for yt_dlp
+                await test_ytdlp_play(interaction=interaction, url=webpage_url) # going to cause errors later on
+            else:
+                channel = message.channel
+                await channel.send(content="Invalid arguments")
+
+
+
+        except asyncio.TimeoutError:
+            channel = message.channel
+            await channel.send(content="Your request timed out.")
+        
+        # Then have user pick a result. Uset the wait for method
+        
 
     except subprocess.CalledProcessError:
         await interaction.send("badeni couldn't process the request")
 
-
-
-
     # Send back the search results.
-    # Then have user pick a result.
+    # https://docs.nextcord.dev/en/stable/ext/commands/api.html#nextcord.ext.commands.Bot.wait_for
+    
     # Then user that result to get audio url and such. You can prolly just call the url function instead.
     # That way I don't have to handle all the queueing nonsense.
-    
-    
+
 
 @bot.slash_command(description="Pauses playback.", guild_ids=[TESTING_GUILD_ID])
 async def pause(interaction: nextcord.Interaction):

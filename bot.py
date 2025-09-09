@@ -35,6 +35,11 @@ bot = commands.Bot(intents=intents)
 # Assign variable for queue.
 queue: Queue = Queue(limit=20)
 
+''' NOTE:
+interaction.send is really cool because it uses method overloading 
+    to change the specfic funciton called based on interaction response state.
+Read more at https://docs.nextcord.dev/en/stable/api.html#nextcord.Interaction.send .
+'''
 
 #======================== (Webhook) Event Listeners ================================#
 @bot.event
@@ -60,7 +65,10 @@ async def on_disconnect():
 # Called when a Member changes their VoiceState. 
 # In our case, we are using it to check for bot inactivity.
 @bot.event
-async def on_voice_state_update(member: Member, before: VoiceState, after: VoiceState):
+async def on_voice_state_update(member: Member, before: VoiceState, after: VoiceState, active: bool = False):
+    if not active:
+        return
+    
     print(f'\nThere was a state change.')
     
     if bot.user == None:
@@ -286,6 +294,7 @@ def get_ytsearch_results(search_inp: str,
     
     return result_list
 
+# should act as 
 @bot.slash_command(description="tests for YTDL audio fetching", guild_ids=[])
 async def test_ytdlp_play(
     interaction: Interaction,
@@ -301,8 +310,10 @@ async def test_ytdlp_play(
     if vc == None:
         await interaction.send("bot hasn't joined channel")
         return
-    
-    await interaction.response.defer(ephemeral=True,with_message=True) # Make user wait for response
+
+    if not interaction.response.is_done():
+        await interaction.response.defer(ephemeral=True,with_message=True) # Make user wait for response
+
 
     # Try get OPUS url.
     audio_url: str | None = None
@@ -315,6 +326,9 @@ async def test_ytdlp_play(
 
     # Could these calls to get_audio_process be done asyncronosly.
     except subprocess.CalledProcessError: # Alternative enconding URLs
+        content = "yt_dlp subprocess failed"
+        print(content)
+
         forms = ['aac', 'alac', 'flac', 'm4a', 'mp3', 'vorbis','wav']
         for form in forms:
             process = get_audio_subprocess(form=form, url=url)
@@ -339,12 +353,14 @@ async def test_ytdlp_play(
             # Could be multiple types of exceptions occuring
 
     # Opus Source creation failure
-    except nextcord.ClientException:
-        print("Opus Source creation failed.")
+    except nextcord.ClientException as e:
+        content = "Opus Source creation failed."
+        print(content)
 
     # Could be multiple types of exceptions occuring
     except:
-        print('unknown error occured during audio URL acquirement')
+        content = "unknown error occured during audio URL acquirement"
+        print(content)
     
     # Play audio, enqueue or handle error.
     finally:
@@ -353,15 +369,17 @@ async def test_ytdlp_play(
             global queue
 
             if queue.isEmpty:
+                content = "playing audio now"
                 vc.play(source=source, after=after)
-                await interaction.followup.send("playing audio now")
             else:
+                content = "added song to the queue"
                 node = QueueNode('None', 0, source)
                 queue.enqueue(node)
-                await interaction.followup.send('Added song to the queue.')
             print(f'source type: {type(source)}')
-        else:
-            await interaction.followup.send("badeni couldn't process your request") 
+        else: 
+            content = "badeni couldn't process your request"
+
+        await interaction.send(content)
 
 # TODO - Checks for the type of reaction given to a message (when called). Takes same arguements as the on_reaction_add event.
 def reaction_add_check(reaction, user) -> bool:
@@ -381,13 +399,13 @@ def reaction_add_check(reaction, user) -> bool:
 async def test_yt_search(
     interaction: Interaction,
     search_inp: str = nextcord.SlashOption(required=True, name='search', description="Pretend you're searching YT."),
-    result_count: int = nextcord.SlashOption(required=True, description='Choose x results', min_value=1, max_value=10, default=5)
+    result_count: int = nextcord.SlashOption(required=False, description='Choose x results', min_value=1, max_value=10, default=1)
 ):
     
     results: list[Dict[str, str]] | None = None
     try:
         await interaction.response.defer(ephemeral=False, with_message=True)
-        results = get_ytsearch_results(result_count=result_count,search_inp=search_inp,) # really should be called asynchronously
+        results = get_ytsearch_results(result_count=result_count,search_inp=search_inp,) # really should be called asynchronously if possible
         content = ''
         
         for i in range(len(results)):
@@ -411,10 +429,10 @@ async def test_yt_search(
                 num = number_emoji_map[reaction.emoji] - 1
                 result = results[num-1] 
                 webpage_url = result['webpage_url'] # same fields as JSON data for yt_dlp
-                await test_ytdlp_play(interaction=interaction, url=webpage_url) # going to cause errors later on
+
+                await test_ytdlp_play(interaction=interaction, url=webpage_url) # # just play the url.
             else:
-                channel = message.channel
-                await channel.send(content="Invalid arguments")
+                await interaction.send(content="Invalid arguments") # what if the user sends a mistaken reaction. needs to be a more robust check.
 
 
 
@@ -422,17 +440,8 @@ async def test_yt_search(
             channel = message.channel
             await channel.send(content="Your request timed out.")
         
-        # Then have user pick a result. Uset the wait for method
-        
-
     except subprocess.CalledProcessError:
         await interaction.send("badeni couldn't process the request")
-
-    # Send back the search results.
-    # https://docs.nextcord.dev/en/stable/ext/commands/api.html#nextcord.ext.commands.Bot.wait_for
-    
-    # Then user that result to get audio url and such. You can prolly just call the url function instead.
-    # That way I don't have to handle all the queueing nonsense.
 
 
 @bot.slash_command(description="Pauses playback.", guild_ids=[TESTING_GUILD_ID])

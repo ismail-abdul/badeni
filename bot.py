@@ -5,11 +5,11 @@ import dotenv
 import logging
 import random
 import subprocess
-from asyncio import sleep
 from Queue import Queue
 from QueueNode import QueueNode
 from typing import Dict, Union
 import asyncio
+import yt_dlp
 
 # Logging
 logger = logging.getLogger('nextcord')
@@ -127,7 +127,7 @@ async def join(interaction: Interaction):
     botVoiceClient: VoiceClient | None = interaction.guild.voice_client # type: ignore
     userVoiceState = interaction.user.voice
 
-    print(f"Active voice clients: {bot.voice_clients}")
+    # print(f"Active voice clients: {bot.voice_clients}")
     for vc in bot.voice_clients:
         print('Disconnecting old voice clients')
         await vc.disconnect(force=True)
@@ -141,7 +141,6 @@ async def join(interaction: Interaction):
         return
 
     channel = userVoiceState.channel
-    # I think <timeout> controls how long it takes for the bot to disconnect due to inactivity.
     try:
         await channel.connect(reconnect=False, timeout=10) #type: ignore
     except Exception as exception:
@@ -211,6 +210,38 @@ async def streamEndsOrError2(interaction: Interaction, error: Exception | None =
     return func
 
 
+def streamEndsOrError(interaction: Interaction, error: Exception | None = None):
+    """
+    Using a higher order function provides context to func without breaking the defintion for after.
+    Once called, this lower func with 'hidden' context is returned. 
+    Hence, we have an finalizer function/coroutine with only error. In theory, 
+    we could apply args and kwargs to this pattern.
+    """
+    async def func(error: Exception | None):
+        global queue # type: Queue
+        await interaction.response.defer(ephemeral=False, with_messasge=True)
+        vc: VoiceClient = interaction.guild.voice_client # type: ignore
+
+        # i.e. connection loss, player fails to process audio, server fails etc. Need to handle each case seperately later.
+        if error: 
+            await vc.disconnect()
+            queue.clear()
+            await interaction.send("Error whilst playing")
+            return 
+        
+        if queue.isEmpty:
+            await vc.disconnect()
+            await interaction.send("Stream ended.")
+            return
+        
+        node: QueueNode = queue.dequeue()
+        vc.play(source=node.source, after = streamEndsOrError(interaction, error))
+        await interaction.send('Playing the next song.') # Improve UX here. Need to make some cool embeds. Mb some templating can be created.
+    
+    return func
+
+
+
 #========================= Queue Management =========================================#
 
 
@@ -218,11 +249,12 @@ async def streamEndsOrError2(interaction: Interaction, error: Exception | None =
 
 # TODO - make async safe.
 # form - audio-format
-def get_audio_subprocess(form: str, url: str):
+async def get_audio_subprocess(form: str, url: str):
     completed_process = subprocess.run(
         args=['yt-dlp.exe', '-x', '-g', '--audio-format', form, url],
         capture_output=True,
-        text=True
+        text=True,
+        timeout=30
     )
     return completed_process
 
@@ -256,7 +288,7 @@ def get_ytsearch_results(search_inp: str,
         i+=2 # skips to next argument
         limit = len(_args)
         
-    print(f'Current args: {*_args, }')
+    # print(f'Current args: {*_args, }')
     
     # Supply the yt-dlp executable and URL argument (which triggers a youtube search)
     _args.append(f'ytsearch{result_count}: {search_inp}')
@@ -274,8 +306,10 @@ def get_ytsearch_results(search_inp: str,
     raw_out = [line for line in raw_out if line.strip()] # Remove blank lines
     # print(f'Line split list: \n {(*raw_out,)}')
 
+    """
     for i in raw_out:
         print(i)
+    """
 
     # Split output into a list of result dictionaries.
     result_list = []
@@ -294,7 +328,6 @@ def get_ytsearch_results(search_inp: str,
     
     return result_list
 
-# should act as 
 @bot.slash_command(description="tests for YTDL audio fetching", guild_ids=[])
 async def test_ytdlp_play(
     interaction: Interaction,
@@ -319,7 +352,7 @@ async def test_ytdlp_play(
     audio_url: str | None = None
     source: nextcord.FFmpegOpusAudio | nextcord.FFmpegPCMAudio | None = None 
     try: # Opus URL
-        process = get_audio_subprocess('opus', url)
+        process = await get_audio_subprocess('opus', url)
         process.check_returncode()
         audio_url = process.stdout
         source = nextcord.FFmpegOpusAudio(source=audio_url)
@@ -331,7 +364,7 @@ async def test_ytdlp_play(
 
         forms = ['aac', 'alac', 'flac', 'm4a', 'mp3', 'vorbis','wav']
         for form in forms:
-            process = get_audio_subprocess(form=form, url=url)
+            process = await get_audio_subprocess(form=form, url=url)
 
             try: # Check for successful extraction
                 process.check_returncode()
@@ -349,11 +382,14 @@ async def test_ytdlp_play(
             except:
                 print('unexpected error occured')
                 continue
+    
+    # Link is likely invalid
+    except subprocess.TimeoutExpired: 
+        content="Subprocess timed out. Likely due to a faulty link"
+        print(content)
 
-            # Could be multiple types of exceptions occuring
-
-    # Opus Source creation failure
-    except nextcord.ClientException as e:
+    # Opus Source creation failure or poor user input
+    except nextcord.ClientException as e: 
         content = "Opus Source creation failed."
         print(content)
 
@@ -365,23 +401,32 @@ async def test_ytdlp_play(
     # Play audio, enqueue or handle error.
     finally:
         if audio_url and source:
-            after = await streamEndsOrError2(interaction)
             global queue
 
             if queue.isEmpty:
-                content = "playing audio now"
+                after = streamEndsOrError(interaction)
                 vc.play(source=source, after=after)
+                content = "playing audio now"
             else:
                 content = "added song to the queue"
-                node = QueueNode('None', 0, source)
-                queue.enqueue(node)
+            
+            print(content)
+            node = QueueNode('None', 0, source)
+            queue.enqueue(node)
             print(f'source type: {type(source)}')
         else: 
             content = "badeni couldn't process your request"
 
         await interaction.send(content)
 
+    # TODO - need a means of detecting when song ends, dequueing from player and continuing
+
+
 # TODO - Checks for the type of reaction given to a message (when called). Takes same arguements as the on_reaction_add event.
+# I also don't really like how song selection is at the moment.
+# The user shouldn't have to find the reaction manually
+# Instead,  reactions should be easily accessible for the number of songs searched for.
+# They should be added by the bot and then detected 
 def reaction_add_check(reaction, user) -> bool:
     # TODO - handle reactions to search results messages.
     # Organic reaction and bot message. Very low integrity. Improve later
@@ -393,8 +438,7 @@ def reaction_add_check(reaction, user) -> bool:
     
     return not( user.bot or (not reaction.message.author.bot) or (not reaction.emoji in number_emoji_map) )
 
-
-
+# 
 @bot.slash_command(description="Get results for a youtube search", guild_ids=[])
 async def test_yt_search(
     interaction: Interaction,
@@ -402,9 +446,9 @@ async def test_yt_search(
     result_count: int = nextcord.SlashOption(required=False, description='Choose x results', min_value=1, max_value=10, default=1)
 ):
     
+    await interaction.response.defer(ephemeral=False, with_message=True)
     results: list[Dict[str, str]] | None = None
     try:
-        await interaction.response.defer(ephemeral=False, with_message=True)
         results = get_ytsearch_results(result_count=result_count,search_inp=search_inp,) # really should be called asynchronously if possible
         content = ''
         
@@ -437,8 +481,7 @@ async def test_yt_search(
 
 
         except asyncio.TimeoutError:
-            channel = message.channel
-            await channel.send(content="Your request timed out.")
+            await interaction.send(content="Your request timed out.")
         
     except subprocess.CalledProcessError:
         await interaction.send("badeni couldn't process the request")

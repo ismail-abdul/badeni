@@ -36,7 +36,7 @@ class Queue:
         else:
             self.queue.insert(posi, node)
     
-    def dequeue(self, index:int = 0) -> QueueNode | None:
+    def dequeue(self, index:int = 0) -> QueueNode:
         return self.queue.pop(index)
         
     def get(self, index: int) -> QueueNode | None:

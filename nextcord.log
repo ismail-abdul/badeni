@@ -1,0 +1,48 @@
+2025-09-11 13:51:19,654:WARNING:nextcord.gateway: Shard ID None voice heartbeat blocked for more than 10 seconds
+Loop thread traceback (most recent call last):
+  File "C:\Users\Abdul\OneDrive\Documents\Discord Bots\stiff\bot.py", line 530, in <module>
+    bot.run(token)
+  File "C:\Users\Abdul\OneDrive\Documents\Discord Bots\stiff\venv\Lib\site-packages\nextcord\client.py", line 894, in run
+    loop.run_until_complete(self.start(token, reconnect=reconnect))
+  File "C:\Python312\Lib\asyncio\base_events.py", line 672, in run_until_complete
+    self.run_forever()
+  File "C:\Python312\Lib\asyncio\windows_events.py", line 321, in run_forever
+    super().run_forever()
+  File "C:\Python312\Lib\asyncio\base_events.py", line 639, in run_forever
+    self._run_once()
+  File "C:\Python312\Lib\asyncio\base_events.py", line 1985, in _run_once
+    handle._run()
+  File "C:\Python312\Lib\asyncio\events.py", line 88, in _run
+    self._context.run(self._callback, *self._args)
+  File "C:\Users\Abdul\OneDrive\Documents\Discord Bots\stiff\venv\Lib\site-packages\nextcord\client.py", line 527, in _run_event
+    await coro(*args, **kwargs)
+  File "C:\Users\Abdul\OneDrive\Documents\Discord Bots\stiff\venv\Lib\site-packages\nextcord\client.py", line 2181, in on_interaction
+    await self.process_application_commands(interaction)
+  File "C:\Users\Abdul\OneDrive\Documents\Discord Bots\stiff\venv\Lib\site-packages\nextcord\client.py", line 2201, in process_application_commands
+    await app_cmd.call_from_interaction(interaction)
+  File "C:\Users\Abdul\OneDrive\Documents\Discord Bots\stiff\venv\Lib\site-packages\nextcord\application_command.py", line 2623, in call_from_interaction
+    await self.call(self._state, interaction)  # type: ignore
+  File "C:\Users\Abdul\OneDrive\Documents\Discord Bots\stiff\venv\Lib\site-packages\nextcord\application_command.py", line 2991, in call
+    await self.call_slash(state, interaction, option_data)
+  File "C:\Users\Abdul\OneDrive\Documents\Discord Bots\stiff\venv\Lib\site-packages\nextcord\application_command.py", line 1931, in call_slash
+    await self.invoke_callback_with_hooks(state, interaction, kwargs=kwargs)
+  File "C:\Users\Abdul\OneDrive\Documents\Discord Bots\stiff\venv\Lib\site-packages\nextcord\application_command.py", line 972, in invoke_callback_with_hooks
+    await self(interaction, *args, **kwargs)
+  File "C:\Users\Abdul\OneDrive\Documents\Discord Bots\stiff\bot.py", line 477, in test_yt_search
+    await test_ytdlp_play(interaction=interaction, url=webpage_url) # # just play the url.
+  File "C:\Users\Abdul\OneDrive\Documents\Discord Bots\stiff\bot.py", line 355, in test_ytdlp_play
+    process = await get_audio_subprocess('opus', url)
+  File "C:\Users\Abdul\OneDrive\Documents\Discord Bots\stiff\bot.py", line 253, in get_audio_subprocess
+    completed_process = subprocess.run(
+  File "C:\Python312\Lib\subprocess.py", line 550, in run
+    stdout, stderr = process.communicate(input, timeout=timeout)
+  File "C:\Python312\Lib\subprocess.py", line 1209, in communicate
+    stdout, stderr = self._communicate(input, endtime, timeout)
+  File "C:\Python312\Lib\subprocess.py", line 1626, in _communicate
+    self.stdout_thread.join(self._remaining_time(endtime))
+  File "C:\Python312\Lib\threading.py", line 1151, in join
+    self._wait_for_tstate_lock(timeout=max(timeout, 0))
+  File "C:\Python312\Lib\threading.py", line 1167, in _wait_for_tstate_lock
+    if lock.acquire(block, timeout):
+
+2025-09-11 15:51:19,322:WARNING:nextcord.gateway: Shard ID None has stopped responding to the gateway. Closing and restarting.

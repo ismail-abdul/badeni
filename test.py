@@ -2,6 +2,7 @@ from Queue import Queue
 from QueueNode import QueueNode
 import subprocess
 from typing import Dict
+from nextcord import FFmpegPCMAudio, FFmpegOpusAudio
 
 # Really want this to run asynchronously or in parallel.
 def get_yt_search_result_links(search: str, num: int = 5):
@@ -37,6 +38,16 @@ def test_queue():
         print("ITAMIIII.")
         print(f'Current Q length: {len(q.queue)}')
 
+def test_queue_2():
+    opus_1 = FFmpegOpusAudio(source='media/opus_skeppy.opus')
+    other_1 = FFmpegPCMAudio(source='media/Skepta_x_Smooth_Soul_2_[K5Ywq18TeVA].webm')
+    queue = Queue()
+    print(queue.isEmpty)
+    queue.enqueue(node=QueueNode('Skepta', 3, opus_1))
+    print(queue.isEmpty)
+    queue.enqueue(node=QueueNode('Skepta', 3, other_1))
+    print(queue.isEmpty)
+    
 '''
 Generates a yt-dlp subprocess that searches Youtube. Then returns the data specifed by the --print arguments.
 @param search_inp is searched for in Youtube
@@ -148,7 +159,8 @@ def test_ytsearch_2():
         print(result)
 
 def main():
-    test_ytsearch_2()
+    # test_ytsearch_2()
+    test_queue_2()
 
 if __name__ == '__main__':
     main()

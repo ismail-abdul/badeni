@@ -4,6 +4,7 @@ import subprocess
 from typing import Dict
 from nextcord import FFmpegPCMAudio, FFmpegOpusAudio
 
+
 # Really want this to run asynchronously or in parallel.
 def get_yt_search_result_links(search: str, num: int = 5):
     # yt-search
@@ -158,9 +159,61 @@ def test_ytsearch_2():
         result = less_is_more[posi]
         print(result)
 
+def test_extract_info() -> list[Dict[str, str | int | float | bool]]:
+    import yt_dlp
+
+    # ℹ️ See help(yt_dlp.YoutubeDL) for a list of available options and public functions
+    URL = 'ytsearch1: less is more skepta'
+    ydl_opts = {}
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        info = ydl.extract_info(URL, download=False, process=True)
+        entries = info['entries']
+        for entry in entries:
+            title = entry['title']
+            uploader = entry['uploader']
+            duration_string = entry['duration_string']
+            url = entry['webpage_url']
+            print(f'title: {title}, uploader: {uploader},  ({duration_string}) -> url: {url}')
+            print('\nNEW_ENTRY STARTS HERE\n')
+        
+        return entries
+    
+        
+
+
+        # ℹ️ ydl.sanitize_info makes the info json-serializable
+
+def test_extract_audio(format: str = 'opus/bestaudio', path: str = './songs/', URL: str = 'https://www.youtube.com/watch?v=XAw52LkbQiU') -> int:
+    """
+    Downloads the audio from a youtube video. Returns 0 for success and non-zero for failure.
+    """
+    import yt_dlp
+    ydl_opts = {
+        'format': f'{format}/aac/alac/m4a/mp3/wav',
+        'outtmpl': '%(id)s',
+        'paths': {'home': path},
+        # ℹ️ See help(yt_dlp.postprocessor) for a list of available Postprocessors and their arguments
+        'postprocessors': [{  # Extract audio using ffmpeg
+            'key': 'FFmpegExtractAudio',
+            'preferredcodec': 'opus',
+        }]
+    }
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        retcode = ydl.download([URL])
+        if retcode != 0:
+            print("Download failed")
+    
+    return retcode
+    
+
+
+        
+
 def main():
     # test_ytsearch_2()
-    test_queue_2()
+    # test_queue_2()
+    test_extract_info()
+    # test_extract_audio()
 
 if __name__ == '__main__':
     main()

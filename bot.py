@@ -7,7 +7,7 @@ import random
 import subprocess
 from Queue import Queue
 from QueueNode import QueueNode
-from typing import Dict, Union
+from typing import List, Dict, Any, Optional
 import asyncio
 import yt_dlp
 
@@ -27,6 +27,11 @@ assert(token != None)
 assert(test_guild_id != None)
 TESTING_GUILD_ID = int(test_guild_id)  # Make sure this is an int
 DEFAULT_PRINT_FIELDS =  ('artist','webpage_url','title')
+EMOJI_TO_NUMBER = {
+    "1️⃣": 1, "2️⃣": 2, "3️⃣": 3, "4️⃣": 4, "5️⃣": 5,
+    "6️⃣": 6, "7️⃣": 7, "8️⃣": 8, "9️⃣": 9, "🔟": 10
+}
+NUMBER_TO_EMOJI = {v:k for k,v in EMOJI_TO_NUMBER.items()}
 
 # Bot & gateway intents setup.
 intents = nextcord.Intents.default()
@@ -183,33 +188,6 @@ async def leave(interaction: Interaction):
 # can i pass an interaction? can I edit// override the function to take the interactionn
 # Supply an interaction to the finaliser funciton. I.e when the stream ends or an error occurs.
 # Read https://docs.nextcord.dev/en/stable/faq.html#how-do-i-pass-a-coroutine-to-the-player-s-after-function for info on how to properly do this.
-async def streamEndsOrError2(interaction: Interaction, error: Exception | None = None):
-    
-    # task/coroutine can be created but not awaited.
-    # return func when the higher order function is executed
-    # the func will have the context of the HO. 
-    async def func(error: Exception | None):
-        global queue
-        await interaction.response.defer(ephemeral=False, with_message=True)
-        vc: VoiceClient = interaction.guild.voice_client # type: ignore
-
-        if error: # Error during the stream. I.e. intenet connection loss, player fails or smn idk. Need to read more
-            # Disconnect voice client and clear the queue
-            await vc.disconnect()
-            queue.clear()
-            await interaction.send("Error whilst playing.")
-
-        else: # Stream ended
-            queue.pop()
-            if len(queue) == 0:
-                await vc.disconnect()
-            # Need to decide on correct method for creating the source i.e. is it opus or not
-            vc.play(source=queue[0], after = await streamEndsOrError2(interaction, error))
-            await interaction.send("Stream ended.")
-
-    return func
-
-
 def streamEndsOrError(interaction: Interaction, error: Exception | None = None):
     """
     Using a higher order function provides context to func without breaking the defintion for after.
@@ -240,9 +218,27 @@ def streamEndsOrError(interaction: Interaction, error: Exception | None = None):
     
     return func
 
-
-
 #========================= Queue Management =========================================#
+
+@bot.slash_command(name="queue", description="See the current state of the queue.", guild_ids=[])
+async def queue_state(interaction: Interaction):
+    pass
+
+@bot.slash_command(name="clear", description="Cleares the queue w/o skipping the current song", guild_ids=[])
+async def clear(interaction: Interaction):
+    pass
+
+@bot.slash_command(name="remove", description="Remove song from queue", guild_ids=[])
+async def remove(interaction: Interaction):
+    pass
+
+@bot.slash_command(name="insert", description="Insert song into queue", guild_ids=[])
+async def insert(interaction: Interaction, position: int = nextcord.SlashOption(name="positon", description="Position of insertion")):
+    pass
+
+@bot.slash_command(name='skip', description="Skip to the next song", guild_ids=[])
+async def skip(interaction: Interaction):
+    pass
 
 
 #========================= Initial Playback Commands ================================#
@@ -273,60 +269,6 @@ Acc I could, but then we taking up double memory unecessarily (asymptotically of
 
 TODO - make this asynchronous if possible. i.e. multiple subprocessess
 '''
-def get_ytsearch_results(search_inp: str,
-                         result_count: int = 5, 
-                         args: tuple[str, ...] = ('artist','webpage_url','title')) ->  list[Dict[str, str]]:
-
-    # _args = [*args,] -> Comma tells interpreter 'we r defining a tuple literal'. field = *args, is usually too ambiguous, but here with the square braces, it's unnecessary. 
-    _args = list(args)
-
-    # insert --print before each requested field
-    limit = len(_args)
-    i = 0
-    while i < limit:
-        _args.insert(i, '--print')
-        i+=2 # skips to next argument
-        limit = len(_args)
-        
-    # print(f'Current args: {*_args, }')
-    
-    # Supply the yt-dlp executable and URL argument (which triggers a youtube search)
-    _args.append(f'ytsearch{result_count}: {search_inp}')
-    _args.insert(0, 'yt-dlp.exe')
-
-    
-    completed_process = subprocess.run(
-        args=_args,
-        capture_output=True,
-        text=True
-    )
-
-    completed_process.check_returncode()
-    raw_out: list[str] = (completed_process.stdout).split('\n')
-    raw_out = [line for line in raw_out if line.strip()] # Remove blank lines
-    # print(f'Line split list: \n {(*raw_out,)}')
-
-    """
-    for i in raw_out:
-        print(i)
-    """
-
-    # Split output into a list of result dictionaries.
-    result_list = []
-    for i in range(0, len(raw_out), len(args)): # i --> 
-        # print(f'i: {i}')
-        result = {} # ith result
-
-        for j in range(0, len(args), 1):
-            # print(f'j: {j}')
-            key = args[j] # jth key
-            value = raw_out[i+j]
-            result[key] = value
-
-        result_list.append(result) # store the result
-
-    
-    return result_list
 
 @bot.slash_command(description="tests for YTDL audio fetching", guild_ids=[])
 async def test_ytdlp_play(
@@ -422,6 +364,95 @@ async def test_ytdlp_play(
     # TODO - need a means of detecting when song ends, dequueing from player and continuing
 
 
+async def ytsearch(
+        query: str,
+        result_count: int, 
+        ydl_opts : Optional[Dict[str, Any]] = None
+    ) -> List[Dict[str, Any]]:
+    
+    """Returns the info about the top N results from Youtube. Read the YoutubeDL class for info about the returned dictionaries. """
+    
+    if ydl_opts is None: 
+        ydl_opts = {}
+
+    # Validate and classify link.
+    URL = f'ytsearch{result_count}: {query}'
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        info: Dict[str, Any] | None = ydl.extract_info(URL, download=False)
+        entries = info['entries']
+        return info.get('entries', [])
+
+async def validateVoiceCommand(interaction: Interaction):
+    '''Validated interaction for voice based commands'''
+    guild: nextcord.Guild | None = interaction.guild
+    if guild == None or guild.id != TESTING_GUILD_ID:
+        await interaction.send("incorrect guild//server origin for this command")
+        return
+    
+    vc: nextcord.VoiceClient | None = guild.voice_client # type: ignore
+    if vc == None:
+        await interaction.send("bot hasn't joined channel")
+        return
+
+    if not interaction.response.is_done():
+        await interaction.response.defer(ephemeral=False,with_message=True) # Make user wait for response
+
+@bot.slash_command(description="plays audio from a specific YT URL", guild_ids=[])
+async def play_url(
+    interaction: Interaction, 
+    url: str = nextcord.SlashOption(description="YT URL", required=True)
+    ):
+    """Plays audio from a specific YT video, specified by an URL.
+    Should prioriize database first. Then go to YT to search and update DB."""
+
+    # Check for bot being joined already.
+    await validateVoiceCommand(interaction)
+    
+@bot.slash_command(description="Search for and play a song", guild_ids=[])
+async def play(
+    interaction: Interaction, 
+    query: str = nextcord.SlashOption(description="YT search query", required=True), 
+    result_count : int = nextcord.SlashOption(description="Num of returned results", default=1, min_value=1, max_value=5)
+    ):
+
+    # Check for bot being joined already.
+    await validateVoiceCommand(interaction)
+
+    '''Allows user to search for videos.'''
+    content = ''
+    entries = await ytsearch(query, result_count)
+    if len(entries) == 0:
+        await interaction.send("badeni couldn't find any results")
+        return
+    
+    # Collect and format results.
+    for i in range(len(entries)):
+        entry = entries[i]
+        webpage_url = entry['webpage_url']
+        duration_string = entry['duration_string']
+        title = entry['title']
+        uploader = entry['uploader']
+        result = f'{i+1}. {title} - **{uploader} ({duration_string})**\n URL: {webpage_url} \n'
+        content += result
+    
+    # Send message
+    await interaction.send(content=content, ephemeral=False)
+    message = await interaction.original_message()
+    
+    print(f'\n type of sent_message: {type(message)}\n')
+    
+    # Add suggested reactions for each result
+    for i in range(1, len(entries)+1):
+        emoji = NUMBER_TO_EMOJI[i]
+        print(emoji)
+        await message.add_reaction(emoji)
+        await asyncio.sleep(0.7)
+    
+
+
+
+
+
 # TODO - Checks for the type of reaction given to a message (when called). Takes same arguements as the on_reaction_add event.
 # I also don't really like how song selection is at the moment.
 # The user shouldn't have to find the reaction manually
@@ -431,12 +462,7 @@ def reaction_add_check(reaction, user) -> bool:
     # TODO - handle reactions to search results messages.
     # Organic reaction and bot message. Very low integrity. Improve later
     
-    number_emoji_map = {
-        "1️⃣": 1, "2️⃣": 2, "3️⃣": 3, "4️⃣": 4, "5️⃣": 5,
-        "6️⃣": 6, "7️⃣": 7, "8️⃣": 8, "9️⃣": 9, "🔟": 10
-    }
-    
-    return not( user.bot or (not reaction.message.author.bot) or (not reaction.emoji in number_emoji_map) )
+    return not( user.bot or (not reaction.message.author.bot) or (not reaction.emoji in EMOJI_TO_NUMBER) )
 
 # 
 @bot.slash_command(description="Get results for a youtube search", guild_ids=[])

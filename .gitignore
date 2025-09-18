@@ -6,6 +6,7 @@ executables/
 media/
 venv/
 .gitignore
+songs/
 
 # Used to store module bytecode for speedier execution.
 __pycache__/ 

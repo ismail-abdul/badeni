@@ -1,6 +1,8 @@
 from QueueNode import QueueNode
 '''
 Queue class for the purpose of creating a queue of songs for a user to add to.
+For the bot to be active, there should be at least one song in the queue 
+i.e. the song currently playing. 
 '''
 class Queue:
 

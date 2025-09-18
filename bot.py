@@ -1,13 +1,13 @@
 import nextcord
 import nextcord.ext.commands as commands
-from nextcord import Member, VoiceState, VoiceClient, Interaction, FFmpegOpusAudio, FFmpegPCMAudio
+from nextcord import Member, VoiceState, VoiceClient, Interaction, FFmpegOpusAudio, FFmpegPCMAudio, User, Member
 import dotenv
 import logging
 import random
 import subprocess
 from Queue import Queue
 from QueueNode import QueueNode
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Union
 import asyncio
 import yt_dlp
 
@@ -188,7 +188,7 @@ async def leave(interaction: Interaction):
 # can i pass an interaction? can I edit// override the function to take the interactionn
 # Supply an interaction to the finaliser funciton. I.e when the stream ends or an error occurs.
 # Read https://docs.nextcord.dev/en/stable/faq.html#how-do-i-pass-a-coroutine-to-the-player-s-after-function for info on how to properly do this.
-def streamEndsOrError(interaction: Interaction, error: Exception | None = None):
+def streamEndsOrError(interaction: Interaction):
     """
     Using a higher order function provides context to func without breaking the defintion for after.
     Once called, this lower func with 'hidden' context is returned. 
@@ -197,7 +197,8 @@ def streamEndsOrError(interaction: Interaction, error: Exception | None = None):
     """
     async def func(error: Exception | None):
         global queue # type: Queue
-        await interaction.response.defer(ephemeral=False, with_messasge=True)
+        if not interaction.response.is_done():
+            await interaction.response.defer(ephemeral=False, with_message=True)
         vc: VoiceClient = interaction.guild.voice_client # type: ignore
 
         # i.e. connection loss, player fails to process audio, server fails etc. Need to handle each case seperately later.
@@ -205,6 +206,7 @@ def streamEndsOrError(interaction: Interaction, error: Exception | None = None):
             await vc.disconnect()
             queue.clear()
             await interaction.send("Error whilst playing")
+            print(error)
             return 
         
         if queue.isEmpty:
@@ -213,7 +215,7 @@ def streamEndsOrError(interaction: Interaction, error: Exception | None = None):
             return
         
         node: QueueNode = queue.dequeue()
-        vc.play(source=node.source, after = streamEndsOrError(interaction, error))
+        vc.play(source=node.source, after = streamEndsOrError(interaction))
         await interaction.send('Playing the next song.') # Improve UX here. Need to make some cool embeds. Mb some templating can be created.
     
     return func
@@ -270,99 +272,21 @@ Acc I could, but then we taking up double memory unecessarily (asymptotically of
 TODO - make this asynchronous if possible. i.e. multiple subprocessess
 '''
 
-@bot.slash_command(description="tests for YTDL audio fetching", guild_ids=[])
-async def test_ytdlp_play(
-    interaction: Interaction,
-    url: str = nextcord.SlashOption(description="YT URL"),
-):
-    # Check for bot being joined already.
+async def validateInteraction(interaction: Interaction):
+    '''Validated interaction for voice based commands'''
     guild: nextcord.Guild | None = interaction.guild
     if guild == None or guild.id != TESTING_GUILD_ID:
         await interaction.send("incorrect guild//server origin for this command")
-        return
+        return -1
     
     vc: nextcord.VoiceClient | None = guild.voice_client # type: ignore
     if vc == None:
         await interaction.send("bot hasn't joined channel")
-        return
+        return -1
 
     if not interaction.response.is_done():
-        await interaction.response.defer(ephemeral=True,with_message=True) # Make user wait for response
-
-
-    # Try get OPUS url.
-    audio_url: str | None = None
-    source: nextcord.FFmpegOpusAudio | nextcord.FFmpegPCMAudio | None = None 
-    try: # Opus URL
-        process = await get_audio_subprocess('opus', url)
-        process.check_returncode()
-        audio_url = process.stdout
-        source = nextcord.FFmpegOpusAudio(source=audio_url)
-
-    # Could these calls to get_audio_process be done asyncronosly.
-    except subprocess.CalledProcessError: # Alternative enconding URLs
-        content = "yt_dlp subprocess failed"
-        print(content)
-
-        forms = ['aac', 'alac', 'flac', 'm4a', 'mp3', 'vorbis','wav']
-        for form in forms:
-            process = await get_audio_subprocess(form=form, url=url)
-
-            try: # Check for successful extraction
-                process.check_returncode()
-                audio_url = process.stdout
-                print(f'The url is {audio_url}')
-                source = nextcord.FFmpegPCMAudio(source=audio_url)
-                break # exit for loop
-
-            except subprocess.CalledProcessError:
-                print("yt_dlp command failed.")
-                continue
-            except nextcord.ClientException:
-                print('FFmpegPCMAudio object creation failed')
-                continue
-            except:
-                print('unexpected error occured')
-                continue
-    
-    # Link is likely invalid
-    except subprocess.TimeoutExpired: 
-        content="Subprocess timed out. Likely due to a faulty link"
-        print(content)
-
-    # Opus Source creation failure or poor user input
-    except nextcord.ClientException as e: 
-        content = "Opus Source creation failed."
-        print(content)
-
-    # Could be multiple types of exceptions occuring
-    except:
-        content = "unknown error occured during audio URL acquirement"
-        print(content)
-    
-    # Play audio, enqueue or handle error.
-    finally:
-        if audio_url and source:
-            global queue
-
-            if queue.isEmpty:
-                after = streamEndsOrError(interaction)
-                vc.play(source=source, after=after)
-                content = "playing audio now"
-            else:
-                content = "added song to the queue"
-            
-            print(content)
-            node = QueueNode('None', 0, source)
-            queue.enqueue(node)
-            print(f'source type: {type(source)}')
-        else: 
-            content = "badeni couldn't process your request"
-
-        await interaction.send(content)
-
-    # TODO - need a means of detecting when song ends, dequueing from player and continuing
-
+        await interaction.response.defer(ephemeral=False,with_message=True) # Make user wait for response
+        return 0
 
 async def ytsearch(
         query: str,
@@ -378,45 +302,96 @@ async def ytsearch(
     # Validate and classify link.
     URL = f'ytsearch{result_count}: {query}'
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info: Dict[str, Any] | None = ydl.extract_info(URL, download=False)
-        entries = info['entries']
+        info: Dict[str, Any] = ydl.extract_info(URL, download=False) #type: ignore
         return info.get('entries', [])
 
-async def validateVoiceCommand(interaction: Interaction):
-    '''Validated interaction for voice based commands'''
-    guild: nextcord.Guild | None = interaction.guild
-    if guild == None or guild.id != TESTING_GUILD_ID:
-        await interaction.send("incorrect guild//server origin for this command")
-        return
-    
-    vc: nextcord.VoiceClient | None = guild.voice_client # type: ignore
-    if vc == None:
-        await interaction.send("bot hasn't joined channel")
-        return
 
-    if not interaction.response.is_done():
-        await interaction.response.defer(ephemeral=False,with_message=True) # Make user wait for response
-
-@bot.slash_command(description="plays audio from a specific YT URL", guild_ids=[])
-async def play_url(
+async def play_url_command(
     interaction: Interaction, 
-    url: str = nextcord.SlashOption(description="YT URL", required=True)
+    url: str,
+    entry: Dict[str, Any],
+    ydl_opts: Optional[Dict[str, Any]] = None,
     ):
     """Plays audio from a specific YT video, specified by an URL.
     Should prioriize database first. Then go to YT to search and update DB."""
 
-    # Check for bot being joined already.
-    await validateVoiceCommand(interaction)
+
+    # outttmp1 - Rule for filename output
+    # paths - Rule for path for download
+    if ydl_opts == None:
+        ydl_opts = {
+            'format': 'opus/bestaudio',
+
+            'postprocessors': [{  # Extract audio using ffmpeg
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': 'opus',
+            }],
+            
+            'outtmpl': './songs/%(id)s.%(ext)s',
+        }
     
-@bot.slash_command(description="Search for and play a song", guild_ids=[])
-async def play(
+
+    # Manage queue. Take the url, download the file.
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl: # type: ignore
+        info = ydl.extract_info(url, download=True)
+        
+        # Handle errors.
+        '''if retcode != 0:
+            print("Download failed")
+            await interaction.send('download failed.')
+            return'''
+        
+        # Check queue state. Play song or just enqueue.
+        creator: str = entry.get(
+            'creators', entry.get(
+                'artist', entry.get(
+                    'uploader'
+                )
+            )
+        ) # type: ignore
+
+        id: str = entry['id']
+        ext = info.get('ext')
+        path = f'songs/{id}.opus' # hard-coded until I can reliably get the extension
+        print(f'source filepath: {path}')
+        print(f'post-processed filepath: {info.get('filepath')}')
+        source = FFmpegOpusAudio(path)
+
+        
+        global queue
+        vc: VoiceClient = interaction.guild.voice_client #type: ignore
+        if queue.isEmpty:
+            # Maybe the interaction is too old?
+            print("Playing song now")
+            vc.play(source, after=streamEndsOrError(interaction))
+        else:
+            print(f'Apparently the queue isn\'t empty. {queue.length}')
+        
+        node = QueueNode(creator, entry['duration_string'], source)
+        queue.enqueue(node)
+
+    # Respond to user accordingly.  
+    try:
+        ext = entry['ext']
+        print(f'Extension: {ext}')
+    except:
+        print("Couldn't find extension in <entry> variable")
+    finally:
+        print(f'command received: {url}')
+        await interaction.send("recieved")
+
+
+@bot.slash_command(name='search', description="Search for and play a song", guild_ids=[])
+async def search_command(
     interaction: Interaction, 
     query: str = nextcord.SlashOption(description="YT search query", required=True), 
     result_count : int = nextcord.SlashOption(description="Num of returned results", default=1, min_value=1, max_value=5)
     ):
 
+    print(f'Here\'s the queue length before search_command is executed: {queue.length}')
     # Check for bot being joined already.
-    await validateVoiceCommand(interaction)
+    returncode =  await validateInteraction(interaction)
+    if returncode != 0: return
 
     '''Allows user to search for videos.'''
     content = ''
@@ -439,79 +414,58 @@ async def play(
     await interaction.send(content=content, ephemeral=False)
     message = await interaction.original_message()
     
-    print(f'\n type of sent_message: {type(message)}\n')
-    
     # Add suggested reactions for each result
     for i in range(1, len(entries)+1):
         emoji = NUMBER_TO_EMOJI[i]
-        print(emoji)
         await message.add_reaction(emoji)
         await asyncio.sleep(0.7)
     
+    # Wait for reactions.
+    try:
+        reaction, user = await bot.wait_for(event='reaction_add', check=reaction_add_check, timeout=30.0)
+        num = EMOJI_TO_NUMBER[reaction.emoji]
+        entry = entries[num-1]
+        webpage_url = entry['webpage_url']
+        print("Attempting to play")
+        await play_url_command(interaction=interaction, url=webpage_url, entry=entry) # just play the url.
+        print("Smn else should be happening rn/")
+
+    # Irrelevant reactions will stop the search. Should dedicate work to another function that gracefully handles irrelevant reactions without making the search useless.
+    except KeyError as e:
+        content = 'Invalid reaction'
+        print(content)
+        await interaction.send(content)
+    except IndexError as e:
+        print(content)
+        content="You somehow reacted with a number too large or too small. Dumbass."
+        await interaction.send(content) # what if the user sends a mistaken reaction. needs to be a more robust check.
+
+    except asyncio.TimeoutError:
+        content = 'request timed out'
+        print(content)
+        await interaction.send(content, delete_after=3.0)
+        await message.delete(delay=5.0)
+    
+    except Exception as e:
+        print("uknown error occuring")
+        print(e)
 
 
 
 
+
+
+    # If unresponded to, delete the message.
+
+    # If responded to correctlt, update queue and player.
+    
 
 # TODO - Checks for the type of reaction given to a message (when called). Takes same arguements as the on_reaction_add event.
-# I also don't really like how song selection is at the moment.
-# The user shouldn't have to find the reaction manually
-# Instead,  reactions should be easily accessible for the number of songs searched for.
-# They should be added by the bot and then detected 
-def reaction_add_check(reaction, user) -> bool:
-    # TODO - handle reactions to search results messages.
-    # Organic reaction and bot message. Very low integrity. Improve later
+def reaction_add_check(reaction: nextcord.Reaction, user: Union[nextcord.Member, nextcord.User]) -> bool:
+    print("Checking if reaction is organic")
+    emoji = reaction.emoji
+    return not( user.bot and EMOJI_TO_NUMBER.get(emoji) ) #type: ignore
     
-    return not( user.bot or (not reaction.message.author.bot) or (not reaction.emoji in EMOJI_TO_NUMBER) )
-
-# 
-@bot.slash_command(description="Get results for a youtube search", guild_ids=[])
-async def test_yt_search(
-    interaction: Interaction,
-    search_inp: str = nextcord.SlashOption(required=True, name='search', description="Pretend you're searching YT."),
-    result_count: int = nextcord.SlashOption(required=False, description='Choose x results', min_value=1, max_value=10, default=1)
-):
-    
-    await interaction.response.defer(ephemeral=False, with_message=True)
-    results: list[Dict[str, str]] | None = None
-    try:
-        results = get_ytsearch_results(result_count=result_count,search_inp=search_inp,) # really should be called asynchronously if possible
-        content = ''
-        
-        for i in range(len(results)):
-            line = f'{i}. '
-            result = results[i]
-            for field in DEFAULT_PRINT_FIELDS:
-                line += f'**{field}**: {result[field]} | '
-            line += '\n'
-            line.removesuffix(' ')
-            content += line
-        
-        message = await interaction.send(content=content) # Replace with embed later on.
-                
-        try:
-            reaction, user = await bot.wait_for(event='reaction_add', check=reaction_add_check, timeout=30.0)
-            number_emoji_map = {
-                "1️⃣": 1, "2️⃣": 2, "3️⃣": 3, "4️⃣": 4, "5️⃣": 5,
-                "6️⃣": 6, "7️⃣": 7, "8️⃣": 8, "9️⃣": 9, "🔟": 10
-            }
-            if reaction.emoji in number_emoji_map and 0 < number_emoji_map[reaction.emoji] and number_emoji_map[reaction.emoji] <= result_count:
-                num = number_emoji_map[reaction.emoji] - 1
-                result = results[num-1] 
-                webpage_url = result['webpage_url'] # same fields as JSON data for yt_dlp
-
-                await test_ytdlp_play(interaction=interaction, url=webpage_url) # # just play the url.
-            else:
-                await interaction.send(content="Invalid arguments") # what if the user sends a mistaken reaction. needs to be a more robust check.
-
-
-
-        except asyncio.TimeoutError:
-            await interaction.send(content="Your request timed out.")
-        
-    except subprocess.CalledProcessError:
-        await interaction.send("badeni couldn't process the request")
-
 
 @bot.slash_command(description="Pauses playback.", guild_ids=[TESTING_GUILD_ID])
 async def pause(interaction: nextcord.Interaction):

@@ -41,7 +41,7 @@ class Queue:
     def dequeue(self, index:int = 0) -> QueueNode:
         return self.queue.pop(index)
         
-    def get(self, index: int) -> QueueNode | None:
+    def get(self, index: int) -> QueueNode:
         return self.queue[index]
 
     def swap(self, a: int, b: int) -> None:

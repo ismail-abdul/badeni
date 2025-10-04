@@ -224,15 +224,81 @@ def streamEndsOrError(interaction: Interaction):
 
 @bot.slash_command(name="queue", description="See the current state of the queue.", guild_ids=[])
 async def queue_state(interaction: Interaction):
-    pass
+    
+    # Validate interaction
+    retcode = await validateInteraction(interaction)
+    if retcode != 0: return
+
+    # An embed with cool images and alll that would fit perfectly here.
+
+    if queue.isEmpty:
+        await interaction.send("queue is empty.")
+    
+    content='Current Queue: \n'
+    for i in range(queue.length):
+        node: QueueNode= queue.get(i)
+        artist = node.artist
+        title = node.title
+        length = node.length
+        url = node.url
+        line = f'{i}. [{title}]({url}) - {artist} ({length})\n'
+        content += line
+    
+    await interaction.send(content)
+
+
+
+
+
 
 @bot.slash_command(name="clear", description="Cleares the queue w/o skipping the current song", guild_ids=[])
 async def clear(interaction: Interaction):
-    pass
+    queue.clear()
+    await interaction.send("Queue has been cleared")
 
 @bot.slash_command(name="remove", description="Remove song from queue", guild_ids=[])
-async def remove(interaction: Interaction):
-    pass
+async def remove(interaction: Interaction, choice: int = nextcord.SlashOption(name='choice')):
+
+    # Send message with current queue state
+    await queue_state(interaction)
+    message = await interaction.original_message()
+    
+    # Add suggested reactions for each result
+    for i in range(1, queue.length+1):
+        emoji = NUMBER_TO_EMOJI[i]
+        await message.add_reaction(emoji)
+        await asyncio.sleep(0.7)
+    
+    # Wait for reactions.
+    content = None
+    try:
+        reaction, user = await bot.wait_for(event='reaction_add', check=reaction_add_check, timeout=30.0)
+        num = EMOJI_TO_NUMBER[reaction.emoji]
+        queue.dequeue(num-1)
+        content = f'Removed song at position **#{num}.**'
+        await interaction.send(content)
+
+    # Irrelevant reactions will stop the search. Should dedicate work to another function that gracefully handles irrelevant reactions without making the search useless.
+    except KeyError as e:
+        content = 'Invalid reaction'
+        await interaction.send(content)
+    except IndexError as e:
+        content="You somehow reacted with a number too large or too small. Dumbass."
+        await interaction.send(content) # what if the user sends a mistaken reaction. needs to be a more robust check.
+
+    except asyncio.TimeoutError:
+        content = 'request timed out'
+        await interaction.send(content, delete_after=3.0)
+        await message.delete(delay=5.0)
+    
+    except Exception as e:
+        print("uknown error occuring")
+        content = e
+    
+    finally:
+        print(content)
+
+    
 
 @bot.slash_command(name="insert", description="Insert song into queue", guild_ids=[])
 async def insert(interaction: Interaction, position: int = nextcord.SlashOption(name="positon", description="Position of insertion")):
@@ -240,7 +306,33 @@ async def insert(interaction: Interaction, position: int = nextcord.SlashOption(
 
 @bot.slash_command(name='skip', description="Skip to the next song", guild_ids=[])
 async def skip(interaction: Interaction):
-    pass
+    # Check for connectedness
+    retcode = await validateInteraction(interaction)
+    vc: nextcord.VoiceClient = interaction.guild.voice_client #type: ignore
+    if retcode != 0:
+        await interaction.send("Interaction is invalid (to a degree).")
+        return
+    elif not vc:
+        await interaction.send("Bot not connected to any channel")
+        return
+    
+    # Check queue
+    global queue
+    if queue.isEmpty:
+        await interaction.send('Queue is already empty!')
+        await vc.disconnect(force=True)
+        return
+    
+    node = queue.dequeue()
+    vc.stop()
+
+    # Notify channel of song change w/ some markdown hyperlinks and formatting
+    await interaction.send(f'1. [{node.title}]({node.url}) - {node.artist} ({node.length})')
+    vc.play(node.source, after=streamEndsOrError(interaction)) 
+
+
+
+
 
 
 #========================= Initial Playback Commands ================================#
@@ -272,8 +364,12 @@ Acc I could, but then we taking up double memory unecessarily (asymptotically of
 TODO - make this asynchronous if possible. i.e. multiple subprocessess
 '''
 
+'''
+    Validates interaction for VoiceClient-dependant commands.
+    
+    Returns a non-zero retcode for invalid interactions.
+'''
 async def validateInteraction(interaction: Interaction):
-    '''Validated interaction for voice based commands'''
     guild: nextcord.Guild | None = interaction.guild
     if guild == None or guild.id != TESTING_GUILD_ID:
         await interaction.send("incorrect guild//server origin for this command")
@@ -342,13 +438,14 @@ async def play_url_command(
             return'''
         
         # Check queue state. Play song or just enqueue.
-        creator: str = entry.get(
-            'creators', entry.get(
-                'artist', entry.get(
-                    'uploader'
-                )
-            )
-        ) # type: ignore
+        fields = ['creators', 'artist', 'uploader']
+        default = 'N/A'
+        artist = ''
+        for field in fields:
+            artist: str = entry.get(field, default)
+            if artist != default:
+                break
+        
 
         id: str = entry['id']
         ext = info.get('ext')
@@ -367,7 +464,7 @@ async def play_url_command(
         else:
             print(f'Apparently the queue isn\'t empty. {queue.length}')
         
-        node = QueueNode(creator, entry['duration_string'], source)
+        node = QueueNode(artist=artist, length=entry['duration_string'], source=source, url=url, title=entry['title'])
         queue.enqueue(node)
 
     # Respond to user accordingly.  

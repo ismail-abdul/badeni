@@ -10,6 +10,7 @@ from QueueNode import QueueNode
 from typing import List, Dict, Any, Optional, Union
 import asyncio
 import yt_dlp
+import sqlite3
 
 # Logging
 logger = logging.getLogger('nextcord')
@@ -40,6 +41,19 @@ bot = commands.Bot(intents=intents)
 # Assign variable for queue.
 queue: Queue = Queue(limit=20)
 
+# Databse setup.
+
+try:
+    conn: sqlite3.Connection = sqlite3.connect("songs.db")
+    cur: sqlite3.Cursor = conn.cursor()
+except:
+    print("Failed to connect to database")
+    if (conn != None): 
+        conn.close()
+    raise SystemExit
+
+
+
 ''' NOTE:
 interaction.send is really cool because it uses method overloading 
     to change the specfic funciton called based on interaction response state.
@@ -64,6 +78,12 @@ async def on_disconnect():
 
     for vc in connections:
         await vc.disconnect(force=True)
+    
+    global conn
+    global cur
+    cur.close()
+    conn.close()
+
 
     print("The bot disconnected fr. Should also disconnect voice connections everywhere.\n")
 
@@ -247,10 +267,6 @@ async def queue_state(interaction: Interaction):
     await interaction.send(content)
 
 
-
-
-
-
 @bot.slash_command(name="clear", description="Cleares the queue w/o skipping the current song", guild_ids=[])
 async def clear(interaction: Interaction):
     queue.clear()
@@ -332,13 +348,8 @@ async def skip(interaction: Interaction):
 
 
 
-
-
-
 #========================= Initial Playback Commands ================================#
 
-# TODO - make async safe.
-# form - audio-format
 async def get_audio_subprocess(form: str, url: str):
     completed_process = subprocess.run(
         args=['yt-dlp.exe', '-x', '-g', '--audio-format', form, url],
@@ -397,7 +408,7 @@ async def ytsearch(
 
     # Validate and classify link.
     URL = f'ytsearch{result_count}: {query}'
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl: #type: ignore
         info: Dict[str, Any] = ydl.extract_info(URL, download=False) #type: ignore
         return info.get('entries', [])
 
@@ -556,6 +567,36 @@ async def search_command(
 
     # If responded to correctlt, update queue and player.
     
+
+# Fetches information about a certain LESS IS MORE record in SongData. Then uses filepath to get access to file and stream.
+# Assumes user is already connected
+@bot.slash_command(name="localstream", description="Testing data retrieval & streaming pipeline from our Database.", guild_ids=[])
+async def fetchAndStream_command(interaction: nextcord.Interaction):
+    await interaction.response.defer(ephemeral=False, with_message=True)
+    global cur
+    global conn
+
+    # Attempt to fetch data from the DB.
+    yt_id="Aizpvina1Fs"
+    statement = "SELECT audio_fp From SongData WHERE yt_id = ?;"
+    try:
+        results = cur.execute(statement, yt_id)
+    except sqlite3.ProgrammingError:
+        await interaction.send("Failed to retrieve data")
+        return
+    
+    fp = results.fetchone()[0]
+    expected_fp = r'songs\Aizpvina1Fs.opus'
+    print(f'retrieved: {fp} | expected: {expected_fp}')
+
+    if fp != expected_fp:
+        await interaction.send("Filepaths failed to match up")
+    else:
+        source: FFmpegOpusAudio = FFmpegOpusAudio(fp)
+        vc: VoiceClient= interaction.guild.voice_client #type: ignore
+        vc.play(source)
+        await interaction.send("Trying to play file now")
+
 
 # TODO - Checks for the type of reaction given to a message (when called). Takes same arguements as the on_reaction_add event.
 def reaction_add_check(reaction: nextcord.Reaction, user: Union[nextcord.Member, nextcord.User]) -> bool:

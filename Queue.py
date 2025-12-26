@@ -3,6 +3,7 @@ from QueueNode import QueueNode
 Queue class for the purpose of creating a queue of songs for a user to add to.
 For the bot to be active, there should be at least one song in the queue 
 i.e. the song currently playing. 
+Zero-based indexing.
 '''
 class Queue:
 
@@ -32,9 +33,11 @@ class Queue:
     def isEmpty(self) -> bool:
         return len(self.queue)==0
 
-    def enqueue(self, node: QueueNode, posi: int = 0) -> IndexError | None :
+    def enqueue(self, node: QueueNode, posi: int = -1) -> IndexError | None :
         if len(self.queue)==10:
             raise IndexError()
+        elif posi == -1:
+            self.queue.append(node)
         else:
             self.queue.insert(posi, node)
     

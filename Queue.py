@@ -30,12 +30,16 @@ class Queue:
             self._limit = limit
 
     @property
+    def isFull(self) -> bool:
+        return len(self.queue) == self.limit
+
+    @property
     def isEmpty(self) -> bool:
         return len(self.queue)==0
 
     def enqueue(self, node: QueueNode, posi: int = -1) -> IndexError | None :
-        if len(self.queue)==10:
-            raise IndexError()
+        if len(self.queue)==self.limit:
+            return
         elif posi == -1:
             self.queue.append(node)
         else:

@@ -333,7 +333,6 @@ async def clear(interaction: Interaction):
 
 @bot.slash_command(name="remove", description="Remove song from queue", guild_ids=[])
 async def remove(interaction: Interaction, choice: int = nextcord.SlashOption(name='choice')):
-
     # Send message with current queue state
     await queue_state_cmd(interaction)
     message = await interaction.original_message()
@@ -503,8 +502,11 @@ async def play_url_command(
         else:
             print(f'Apparently the queue isn\'t empty. {queue.length}')
         
-        node = QueueNode(artist=artist, length=entry['duration_string'], source=source, url=url, title=entry['title'])
-        queue.enqueue(node)
+        if not queue.isFull:
+            node = QueueNode(artist=artist, length=entry['duration_string'], source=source, url=url, title=entry['title'])
+            queue.enqueue(node)
+        else:
+            await interaction.send("queue is full")
 
     # Respond to user accordingly.  
     try:

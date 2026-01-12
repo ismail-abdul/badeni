@@ -50,9 +50,19 @@ try:
     cur: sqlite3.Cursor = conn.cursor()
 except:
     print("Failed to connect to database")
-    if (conn != None): 
-        conn.close()
+    if (conn != None): conn.close()
     raise SystemExit
+
+audio_ydl = yt_dlp.YoutubeDL({
+    'format': 'opus/bestaudio',
+    'postprocessors': [{  # Extract audio using ffmpeg
+        'key': 'FFmpegExtractAudio',
+        'preferredcodec': 'opus',
+    }],
+    'outtmpl': './songs/%(id)s.%(ext)s'
+}) # type: ignore
+search_ydl = yt_dlp.YoutubeDL({})
+
 
 
 
@@ -83,8 +93,12 @@ async def on_disconnect():
     
     global conn
     global cur
+    global audio_ydl
+    global search_ydl
     cur.close()
     conn.close()
+    audio_ydl.close()
+    search_ydl.close()
 
 
     print("The bot disconnected fr. Should also disconnect voice connections everywhere.\n")
@@ -290,35 +304,25 @@ async def populate_q_cmd(interaction: Interaction):
     
 
 async def populate_q(interaction: Interaction):
-
-    ydl_opts = {
-        'format': 'opus/bestaudio',
-        'postprocessors': [{  # Extract audio using ffmpeg
-            'key': 'FFmpegExtractAudio',
-            'preferredcodec': 'opus',
-        }],
-        'outtmpl': './songs/%(id)s.%(ext)s',
-    }
-
+    global audio_ydl
     # Manage queue. Take the url, download the file.
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl: # type: ignore
-        yt_ids = [r"0DPNmsLrqFE", r"rKUJG5TdAl8", r"4QXXEUD9Kgc", r"0MT1AegYI_4", r"SfK549sa8VE"]
-        for id in yt_ids:
-            url = rf'www.youtube.com/watch?v={id}'
-            path = rf'songs\{id}.opus'
-            node = None
-            if not os.path.exists(path):
-                info = ydl.extract_info(url, download=True)
-                artist: str = info.get('uploader')
-                title: str = info.get('title')
-                source = FFmpegOpusAudio(path)
-                node = QueueNode(artist=artist, length=0, source=source, url=url, title=title)
-            else:
-                source = FFmpegOpusAudio(f'songs/{id}.opus')
-                node = QueueNode('N/A', 0, source, url, 0, id)
-            global queue
-            queue.enqueue(node)
-    
+    yt_ids = [r"0DPNmsLrqFE", r"rKUJG5TdAl8", r"4QXXEUD9Kgc", r"0MT1AegYI_4", r"SfK549sa8VE"]
+    for id in yt_ids:
+        url = rf'www.youtube.com/watch?v={id}'
+        path = rf'songs\{id}.opus'
+        node = None
+        if not os.path.exists(path):
+            info = audio_ydl.extract_info(url, download=True)
+            artist: str | None = info.get('uploader')
+            title: str | None = info.get('title')
+            source = FFmpegOpusAudio(path)
+            node = QueueNode(artist=artist, length=0, source=source, url=url, title=title)
+        else:
+            source = FFmpegOpusAudio(f'songs/{id}.opus')
+            node = QueueNode('N/A', 0, source, url, 0, id)
+        global queue
+        queue.enqueue(node)
+
             
 
 
@@ -398,46 +402,26 @@ async def skip(interaction: Interaction):
 
 #========================= Initial Playback Commands ================================#
 
-
-
-'''
-    Validates interaction for VoiceClient-dependant commands.
-    
-    Returns a non-zero retcode for invalid interactions.
-'''
-async def validateInteraction(interaction: Interaction):
-    guild: nextcord.Guild | None = interaction.guild
-    if guild == None or guild.id != TESTING_GUILD_ID:
-        await interaction.send("incorrect guild//server origin for this command")
-        return -1
-    
-    vc: nextcord.VoiceClient | None = guild.voice_client # type: ignore
-    if vc == None:
-        await interaction.send("bot hasn't joined channel")
-        return -1
-
-    if not interaction.response.is_done():
-        await interaction.response.defer(ephemeral=False,with_message=True) # Make user wait for response
-        return 0
-    else:
-        return 0
-
 async def ytsearch(
         query: str,
         result_count: int, 
-        ydl_opts : Optional[Dict[str, Any]] = None
     ) -> List[Dict[str, Any]]:
-    
-    """Returns the info about the top N results from Youtube. Read the YoutubeDL class for info about the returned dictionaries. """
-    
-    if ydl_opts is None: 
-        ydl_opts = {}
+
+    def func(query, result_count):
+        # NOTE: If application uses multi-threading, ensure you use locks on global variables.
+        global search_ydl
+        URL = f'ytsearch{result_count}: {query}'
+        info: Dict[str, Any] = search_ydl.extract_info(URL, download=False) # type: ignore
+        return info.get('entries', [])
 
     # Validate and classify link.
-    URL = f'ytsearch{result_count}: {query}'
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl: #type: ignore
-        info: Dict[str, Any] = ydl.extract_info(URL, download=False) #type: ignore
-        return info.get('entries', [])
+    loop = asyncio.get_running_loop()
+    entries = await loop.run_in_executor(
+        None, 
+        func, query, result_count
+    )
+    return entries
+
 
 
 async def play_url_command(
@@ -449,64 +433,52 @@ async def play_url_command(
     """Plays audio from a specific YT video, specified by an URL.
     Should prioriize database first. Then go to YT to search and update DB."""
 
-
-    # outttmp1 - Rule for filename output
-    # paths - Rule for path for download
-    if ydl_opts == None:
-        ydl_opts = {
-            'format': 'opus/bestaudio',
-
-            'postprocessors': [{  # Extract audio using ffmpeg
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'opus',
-            }],
-            
-            'outtmpl': './songs/%(id)s.%(ext)s',
-        }
+    # Manage queue. Take the url, download the file.
+    global audio_ydl
+    loop = asyncio.get_running_loop()
+    info = await loop.run_in_executor(
+        None, 
+        lambda: audio_ydl.extract_info(url, download=True) 
+    )
+    
+    # Handle errors.
+    '''if retcode != 0:
+        print("Download failed")
+        await interaction.send('download failed.')
+        return'''
+    
+    # Check queue state. Play song or just enqueue.
+    fields = ['creators', 'artist', 'uploader']
+    default = 'N/A'
+    artist = ''
+    for field in fields:
+        artist: str = entry.get(field, default)
+        if artist != default:
+            break
     
 
-    # Manage queue. Take the url, download the file.
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl: # type: ignore
-        info = ydl.extract_info(url, download=True)
-        
-        # Handle errors.
-        '''if retcode != 0:
-            print("Download failed")
-            await interaction.send('download failed.')
-            return'''
-        
-        # Check queue state. Play song or just enqueue.
-        fields = ['creators', 'artist', 'uploader']
-        default = 'N/A'
-        artist = ''
-        for field in fields:
-            artist: str = entry.get(field, default)
-            if artist != default:
-                break
-        
+    id: str = entry['id']
+    ext = info.get('ext')
+    path = f'songs/{id}.opus' # hard-coded until I can reliably get the extension
+    print(f'source filepath: {path}')
+    print(f'post-processed filepath: {info.get('filepath')}')
+    source = FFmpegOpusAudio(path)
 
-        id: str = entry['id']
-        ext = info.get('ext')
-        path = f'songs/{id}.opus' # hard-coded until I can reliably get the extension
-        print(f'source filepath: {path}')
-        print(f'post-processed filepath: {info.get('filepath')}')
-        source = FFmpegOpusAudio(path)
-
-        
-        global queue
-        vc: VoiceClient = interaction.guild.voice_client #type: ignore
-        if queue.isEmpty:
-            # Maybe the interaction is too old?
-            print("Playing song now")
-            vc.play(source, after=streamEndsOrError(interaction))
-        else:
-            print(f'Apparently the queue isn\'t empty. {queue.length}')
-        
-        if not queue.isFull:
-            node = QueueNode(artist=artist, length=entry['duration_string'], source=source, url=url, title=entry['title'])
-            queue.enqueue(node)
-        else:
-            await interaction.send("queue is full")
+    
+    global queue
+    vc: VoiceClient = interaction.guild.voice_client #type: ignore
+    if queue.isEmpty:
+        # Maybe the interaction is too old?
+        print("Playing song now")
+        vc.play(source, after=streamEndsOrError(interaction))
+    else:
+        print(f'Apparently the queue isn\'t empty. {queue.length}')
+    
+    if not queue.isFull:
+        node = QueueNode(artist=artist, length=entry['duration_string'], source=source, url=url, title=entry['title'])
+        queue.enqueue(node)
+    else:
+        await interaction.send("queue is full")
 
     # Respond to user accordingly.  
     try:
@@ -525,11 +497,11 @@ async def search_command(
     query: str = nextcord.SlashOption(description="YT search query", required=True), 
     result_count : int = nextcord.SlashOption(description="Num of returned results", default=1, min_value=1, max_value=5)
 ):
+# if not interaction.response.is_done():
+    await interaction.response.defer(ephemeral=False, with_message=True)
 
     print(f'Here\'s the queue length before search_command is executed: {queue.length}')
     # Check for bot being joined already.
-    returncode =  await validateInteraction(interaction)
-    if returncode != 0: return
 
     '''Allows user to search for videos.'''
     content = ''
@@ -549,7 +521,7 @@ async def search_command(
         content += result
     
     # Send message
-    await interaction.send(content=content, ephemeral=False)
+    await interaction.followup.send(content=content, ephemeral=False)
     message = await interaction.original_message()
     
     # Add suggested reactions for each result

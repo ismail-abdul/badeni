@@ -423,7 +423,6 @@ async def ytsearch(
     return entries
 
 
-
 async def play_url_command(
     interaction: Interaction, 
     url: str,
@@ -432,6 +431,16 @@ async def play_url_command(
 ):
     """Plays audio from a specific YT video, specified by an URL.
     Should prioriize database first. Then go to YT to search and update DB."""
+
+    # Check database for an instance first.
+    yt_id = url[-12::]
+    global cur
+    res = cur.execute(
+        'SELECT * FROM Tracks WHERE yt_id = ?;', yt_id
+    )
+    track = res.fetchone()
+    if track != None:
+        # Needs better design function is getting too long.
 
     # Manage queue. Take the url, download the file.
     global audio_ydl
@@ -500,7 +509,7 @@ async def search_command(
 # if not interaction.response.is_done():
     await interaction.response.defer(ephemeral=False, with_message=True)
 
-    print(f'Here\'s the queue length before search_command is executed: {queue.length}')
+    # print(f'Here\'s the queue length before search_command is executed: {queue.length}')
     # Check for bot being joined already.
 
     '''Allows user to search for videos.'''

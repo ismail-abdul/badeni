@@ -4,7 +4,6 @@ from nextcord import Member, VoiceState, VoiceClient, Interaction, FFmpegOpusAud
 import dotenv
 import logging
 import random
-import subprocess
 from Queue import Queue
 from QueueNode import QueueNode
 from typing import List, Dict, Any, Optional, Union
@@ -169,7 +168,7 @@ async def join(interaction: Interaction):
 
     #identify user voice state
     botVoiceClient: VoiceClient | None = interaction.guild.voice_client # type: ignore
-    userVoiceState = interaction.user.voice
+    userVoiceState = interaction.user.voice #type: ignore
 
     # print(f"Active voice clients: {bot.voice_clients}")
     for vc in bot.voice_clients:
@@ -599,13 +598,6 @@ async def fetchAndStream_command(interaction: nextcord.Interaction):
         vc: VoiceClient= interaction.guild.voice_client #type: ignore
         vc.play(source)
         await interaction.send("Trying to play file now")
-
-
-# TODO - Checks for the type of reaction given to a message (when called). Takes same arguements as the on_reaction_add event.
-def reaction_add_check(reaction: nextcord.Reaction, user: Union[nextcord.Member, nextcord.User]) -> bool:
-    print("Checking if reaction is organic")
-    emoji = reaction.emoji
-    return not( user.bot and EMOJI_TO_NUMBER.get(emoji) ) #type: ignore
     
 
 @bot.slash_command(description="Pauses playback.", guild_ids=[TESTING_GUILD_ID])

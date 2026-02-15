@@ -13,9 +13,10 @@ class Voice(commands.Cog):
         self.queue = queue
     
 
+    """When bot is ready to communicate on Discord, 
+    amessage is outputed to command line. """
     @commands.Cog.listener()
     async def on_ready(self):
-        #Load media files from elsewhere
         connections = self.bot.voice_clients
     
         for vc in connections:

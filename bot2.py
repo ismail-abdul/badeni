@@ -14,6 +14,8 @@ import sqlite3
 
 from cogs.playback import Playback 
 from cogs.playerQueue import PlayerQueue
+from cogs.voice import Voice
+from cogs.search import Search
 
 # Logging
 logger = logging.getLogger('nextcosrd')
@@ -71,8 +73,12 @@ bot = commands.Bot(intents=intents)
 
 playback = Playback(bot=bot)
 player_q = PlayerQueue(bot=bot, queue=queue, audio_ydl=audio_ydl)
+voice = Voice(bot=bot, conn=conn, cur=cur, audio_ydl=audio_ydl, search_ydl=search_ydl, queue=queue)
+search = Search(bot=bot,audio_ydl=audio_ydl, search_ydl=search_ydl)
 bot.add_cog(playback, override = True)
 bot.add_cog(player_q, override = True)
+bot.add_cog(voice, override = True)
+bot.add_cog(search, override = True)
 
 bot.run(token)
 

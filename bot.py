@@ -215,7 +215,7 @@ async def leave(interaction: Interaction):
             await interaction.send("bot not connected to any voice channels")
         elif not interaction.user:
             await interaction.send("command not sent by a user")
-        elif not interaction.user.voice:
+        elif not interaction.user.voice: #type: ignore
             await interaction.send("you are not in a voice channel")
     finally:
         return
@@ -440,6 +440,7 @@ async def play_url_command(
     track = res.fetchone()
     if track != None:
         # Needs better design function is getting too long.
+        pass
 
     # Manage queue. Take the url, download the file.
     global audio_ydl

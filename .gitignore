@@ -1,12 +1,15 @@
 .env
 *.mp3
-.gitignore
+.gitignore 
 planning/
 executables/
 media/
 venv/
 .gitignore
 songs/
+deprecated/
+.vscode/
 
 # Used to store module bytecode for speedier execution.
 __pycache__/ 
+*.md

@@ -34,21 +34,16 @@ song length limiting
 [X] pause
 [X] resume
 
-### [] Voice
-[] move (allows bots to join and leave) - mask as join
-[] leave
-[] mute
-[] volume
+### [X] Voice
+[X] leave
+[X] join
 
-### Queue
-[] enqueue
-[] dequeue
-[] jump
+### [X] Queue
+[X] enqueue
+[X] dequeue
 
 ### Download
 [] music download from youtube
-[] music download from soundcloud
-[] music download from spotify
 
 (in the future, filter non-premium users, songs that are too long to download etc)
 ### Data
@@ -56,15 +51,22 @@ song length limiting
 
 
 ### Search
-[] search youtube
-[] search spotify
-[] search soundcloud
+[] search youtube service
 [] general search (online and local)
+
+How to implement?
+Essentially, just take YTDL object, make a query with it
 
 <!-- ### Stream (future feature) -->
 <!-- [] radio -->
 
 
-## Cogs
-## Commands
-## Functions
+
+## Scope Creep
+[] music download from soundcloud
+[] music download from spotify
+[] mute
+[] volume
+[] move (allows bots to join and leave) - mask as join
+[] search spotify
+[] search soundcloud

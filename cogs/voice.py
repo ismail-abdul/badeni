@@ -2,15 +2,11 @@ import nextcord
 import nextcord.ext.commands as commands
 from nextcord import Member, VoiceState, VoiceClient, Interaction, FFmpegOpusAudio, FFmpegPCMAudio, User, Member
 from typing import List, Dict, Any, Optional, Union
+from bot import Badeni
 
 class Voice(commands.Cog):
-    def __init__(self, bot, conn, cur, audio_ydl, search_ydl, queue):
+    def __init__(self, bot: Badeni):
         self.bot = bot
-        self.conn = conn
-        self.cur = cur
-        self.audio_ydl = audio_ydl
-        self.search_ydl = search_ydl
-        self.queue = queue
     
 
     """When bot is ready to communicate on Discord, 
@@ -76,8 +72,14 @@ class Voice(commands.Cog):
         
         print("\n") 
 
-    #======================== Connection Commands & Logic ================================#
+    #====================== Cog Lifecycle Management =======================================#
+    # NOTE - Implement this when cog is complete. 
+    def cog_unload(self) -> None:
+        pass
+
     
+    #======================== Connection Commands & Logic ================================#
+
     @nextcord.slash_command(name="join", description="Join current voice channel", guild_ids=[])
     async def join(self, interaction: Interaction):
         if not interaction.response.is_done():
@@ -119,8 +121,7 @@ class Voice(commands.Cog):
     @nextcord.slash_command(name="leave", description="Leave the current voice channel.", guild_ids=[])
     async def leave(self, interaction: Interaction):    
         try:
-            # Also need to clear the queue in this case.
-            # vc will always be used for a VoiceCLeint object. Not a voice channel.
+            # Access the existing cogs
             vc: VoiceClient = interaction.guild.voice_client # type: ignore
             await vc.disconnect(force=True)
             self.queue.clear()
@@ -136,3 +137,6 @@ class Voice(commands.Cog):
                 await interaction.send("you are not in a voice channel")
         finally:
             return
+        
+
+    

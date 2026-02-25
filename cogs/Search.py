@@ -4,6 +4,8 @@ from nextcord import Member, VoiceState, VoiceClient, Interaction, FFmpegOpusAud
 from typing import List, Dict, Any, Optional, Union
 import yt_dlp
 import asyncio
+from bot import Badeni
+from services.Search import Search as SearchService
 
 """
 Commands and methods related to searching local and web-based
@@ -20,10 +22,96 @@ class Search(commands.Cog):
     }
     NUMBER_TO_EMOJI = {v:k for k,v in EMOJI_TO_NUMBER.items()}
 
-    def __init__(self, bot: nextcord.Client, audio_ydl: yt_dlp.YoutubeDL, search_ydl: yt_dlp.YoutubeDL):
-        self.bot = bot
-        self.audio_ydl = audio_ydl
-        self.search_ydl = search_ydl
+    AUDIO_OPTS = {
+        'format': 'opus/bestaudio',
+        'postprocessors': [{  # Extract audio using ffmpeg
+            'key': 'FFmpegExtractAudio',
+            'preferredcodec': 'opus',
+        }],
+        'outtmpl': './songs/%(id)s.%(ext)s'
+    }
 
+
+    def __init__(self, bot: Badeni, search: SearchService):
+        self.bot = bot
+        self.search_service = search
     
+    def user_results_msg(self, entries):
+        content = ''
+        for i in range(len(entries)):
+            entry = entries[i]
+            webpage_url = entry['webpage_url']
+            duration_string = entry['duration_string']
+            title = entry['title']
+            uploader = entry['uploader']
+            result = f'{i+1}. {title} - **{uploader} ({duration_string})**\n URL: {webpage_url} \n'
+            content += result
+        return content
     
+    async def pick_result(self, entries, message, interaction: Interaction) -> int:
+        """Waits for user to pick from the results. 
+        Choice discarded if user takes too long to react.
+        Returns corresponging entries index number (provided user picks in time). """
+        content = ''
+        # Add suggested reactions for each result
+        for i in range(1, len(entries)+1):
+            emoji = self.NUMBER_TO_EMOJI[i]
+            await message.add_reaction(emoji)
+            await asyncio.sleep(0.7)
+        
+        # Wait for reactions.
+        try:
+            reaction, user = await self.bot.wait_for(event='reaction_add', check=self.bot.reaction_add_check, timeout=30.0)
+            num = self.EMOJI_TO_NUMBER[reaction.emoji]
+            entry = entries[num-1]
+            webpage_url = entry['webpage_url']
+            print(f'Attempting to play: URL:{webpage_url} (num: {num})')
+            # await play_url_command(interaction=interaction, url=webpage_url, entry=entry) # just play the url.
+            print("Play url command not yet implemented")
+            # print("Smn else should be happening rn/")
+            return num-1
+    
+        # Irrelevant reactions will stop the search. Should dedicate work to another function that gracefully handles irrelevant reactions without making the search useless.
+        except KeyError as e:
+            content = 'Invalid reaction'
+            print(content)
+            await interaction.send(content)
+            return -1
+        
+        except IndexError as e:
+            print(content)
+            content="You somehow reacted with a number too large or too small. Dumbass."
+            await interaction.send(content) # what if the user sends a mistaken reaction. needs to be a more robust check.
+            return -1
+    
+        except asyncio.TimeoutError:
+            content = 'request timed out'
+            print(content)
+            await interaction.send(content, delete_after=3.0)
+            await message.delete(delay=5.0)
+            return -1
+        
+        except Exception as e:
+            print("uknown error occuring")
+            print(e)
+            return -1
+
+    # Maybe that song length limit should be user_configurable
+    @nextcord.slash_command(name='search', description="Search for and play a song", guild_ids=[])
+    async def search_command(
+        self,
+        interaction: Interaction, 
+        query: str = nextcord.SlashOption(description="YT search query", required=True), 
+        result_count : int = nextcord.SlashOption(description="Max number of returned results", default=1, min_value=1, max_value=5)
+    ):
+        await self.bot.defer(interaction)
+        raw_results = await self.search_service.ytsearch(query, result_count)
+        content = self.user_results_msg(raw_results)
+        msg = await interaction.send(content)
+        choice = await self.pick_result(raw_results, msg, interaction)
+        await interaction.send(f'choice: {choice}')
+        
+       
+        
+
+

@@ -1,5 +1,4 @@
-from services.Queue import Queue
-from services.QueueNode import QueueNode
+from services.queueNode import QueueNode
 from nextcord import Interaction
 
 def streamEndsOrError(self, interaction: Interaction):
@@ -10,7 +9,6 @@ def streamEndsOrError(self, interaction: Interaction):
         we could apply args and kwargs to this pattern.
         """
         async def func(error: Exception | None):
-            global queue # type: Queue
             if not interaction.response.is_done():
                 await interaction.response.defer(ephemeral=False, with_message=True)
             vc: VoiceClient = interaction.guild.voice_client # type: ignore

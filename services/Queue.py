@@ -1,4 +1,4 @@
-from QueueNode import QueueNode
+from services.queueNode import QueueNode
 '''
 Queue class for the purpose of creating a queue of songs for a Discord user to add to.
 For the bot to be active, there should be at least one song in the queue 

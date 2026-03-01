@@ -2,10 +2,9 @@ import nextcord
 import nextcord.ext.commands as commands
 from nextcord import Member, VoiceState, VoiceClient, Interaction, FFmpegOpusAudio, FFmpegPCMAudio, User, Member
 from typing import List, Dict, Any, Optional, Union
-from bot import Badeni
 
 class Voice(commands.Cog):
-    def __init__(self, bot: Badeni):
+    def __init__(self, bot: commands.Bot):
         self.bot = bot
     
 
@@ -28,12 +27,6 @@ class Voice(commands.Cog):
         for vc in connections:
             await vc.disconnect(force=True)
         
-        self.cur.close()
-        self.conn.close()
-        self.audio_ydl.close()
-        self.search_ydl.close()
-    
-    
         print("The bot disconnected fr. Should also disconnect voice connections everywhere.\n")
     
     # Called when a Member changes their VoiceState. 
@@ -124,7 +117,7 @@ class Voice(commands.Cog):
             # Access the existing cogs
             vc: VoiceClient = interaction.guild.voice_client # type: ignore
             await vc.disconnect(force=True)
-            self.queue.clear()
+            # self.queue.clear()
             await interaction.send("bot has left")
         except:
             if not interaction.guild:

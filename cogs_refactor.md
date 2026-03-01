@@ -51,7 +51,7 @@ song length limiting
 
 
 ### Search
-[] search youtube service
+[X] search youtube service
 [] general search (online and local)
 
 How to implement?

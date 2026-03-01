@@ -5,8 +5,8 @@ import dotenv
 import logging
 import random
 import subprocess
-from Queue import Queue
-from QueueNode import QueueNode
+from queue import QueueQueue
+from queueNode import QueueNode
 from typing import List, Dict, Any, Optional, Union
 import asyncio
 import yt_dlp

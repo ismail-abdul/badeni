@@ -3,18 +3,17 @@ import nextcord.ext.commands as commands
 from nextcord import Member, VoiceState, VoiceClient, Interaction, FFmpegOpusAudio, FFmpegPCMAudio, User, Member
 from typing import List, Dict, Any, Optional, Union
 import asyncio
-from services.Queue import *
+from services.queue import *
 import os
 from yt_dlp import YoutubeDL
-from bot import Badeni
 
 
 """
 A Cog responsible for handling the bot's queue.
 """
 class PlayerQueue(commands.Cog):
-    def __init__(self, bot: Badeni, queue: Queue):
-        self.bot: Badeni = bot
+    def __init__(self, bot: commands.Bot, queue: Queue):
+        self.bot: commands.Bot = bot
         self.queue: Queue = queue
         self.DEFAULT_PRINT_FIELDS =  ('artist','webpage_url','title')
         self.EMOJI_TO_NUMBER = {

@@ -4,7 +4,6 @@ from nextcord import Member, VoiceState, VoiceClient, Interaction, FFmpegOpusAud
 from typing import List, Dict, Any, Optional, Union
 import yt_dlp
 import asyncio
-from bot import Badeni
 from services.Search import Search as SearchService
 
 """
@@ -32,7 +31,7 @@ class Search(commands.Cog):
     }
 
 
-    def __init__(self, bot: Badeni, search: SearchService):
+    def __init__(self, bot: commands.Bot, search: SearchService):
         self.bot = bot
         self.search_service = search
     
@@ -56,8 +55,8 @@ class Search(commands.Cog):
         # Add suggested reactions for each result
         for i in range(1, len(entries)+1):
             emoji = self.NUMBER_TO_EMOJI[i]
-            await message.add_reaction(emoji)
             await asyncio.sleep(0.7)
+            await message.add_reaction(emoji)
         
         # Wait for reactions.
         try:
@@ -104,13 +103,14 @@ class Search(commands.Cog):
         query: str = nextcord.SlashOption(description="YT search query", required=True), 
         result_count : int = nextcord.SlashOption(description="Max number of returned results", default=1, min_value=1, max_value=5)
     ):
-        await self.bot.defer(interaction)
+        await interaction.response.defer()
         raw_results = await self.search_service.ytsearch(query, result_count)
         content = self.user_results_msg(raw_results)
-        msg = await interaction.send(content)
+        msg = await interaction.send(content, ephemeral=False)
         choice = await self.pick_result(raw_results, msg, interaction)
         await interaction.send(f'choice: {choice}')
         
+       
        
         
 

@@ -1,5 +1,5 @@
-from Queue import Queue
-from QueueNode import QueueNode
+from services.queue import Queue
+from services.queueNode import QueueNode
 import subprocess
 from typing import Dict
 from nextcord import FFmpegPCMAudio, FFmpegOpusAudio

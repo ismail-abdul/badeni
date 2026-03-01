@@ -40,7 +40,7 @@ class Search:
         def func(query: str, result_count: int):
             # NOTE: If application uses 
             URL = f'ytsearch{result_count}: {query}'
-            info: Dict[str, Any] = self._search_ydl.1extract_info(URL, download=False) # type: ignore
+            info: Dict[str, Any] = self._search_ydl.extract_info(URL, download=False) # type: ignore
             return info.get('entries', [])
 
         # Validate and classify link.

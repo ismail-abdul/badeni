@@ -3,13 +3,11 @@ import nextcord.ext.commands as commands
 from nextcord import Member, VoiceState, VoiceClient, Interaction, FFmpegOpusAudio, FFmpegPCMAudio, User, Member, SlashOption
 import dotenv
 from typing import List, Dict, Any, Optional, Union
-from helpers import streamEndsOrError
 import asyncio
-from services.Queue import Queue
-from services.Queue import QueueNode
-from PlayerQueue import PlayerQueue
+from services.queue import Queue
+from services.queueNode import QueueNode
+from cogs.playerQueue import PlayerQueue
 import os
-from bot import Badeni
 
 # Load .env config
 dotenv.load_dotenv()
@@ -21,7 +19,7 @@ assert(test_guild_id != None)
 TESTING_GUILD_ID = int(test_guild_id)  # Make sure this is an int
 
 class Playback(commands.Cog):
-    def __init__(self, bot:Badeni):
+    def __init__(self, bot:commands.Bot):
         self.bot = bot
         # other inherited information
         # playback shouldn't need access to the queue. I only want play, pause, seek mb
@@ -35,7 +33,7 @@ class Playback(commands.Cog):
     
     @nextcord.slash_command(name="play_test", description="Test the ability of bot to play a piece of audio.", guild_ids=[])
     async def play_test_cmd(self, interaction: Interaction):
-        await self.bot.defer(interaction)
+        await self.bot.defer(interaction) #type: ignore
         # exemplar filepath
         path = rf"..\songs\Aizpvina1Fs.opus"
         source: FFmpegOpusAudio = FFmpegOpusAudio(source=path)
@@ -51,7 +49,7 @@ class Playback(commands.Cog):
     
     @nextcord.slash_command(name="pause", description="Pauses a track if it's playing")
     async def pause(self, interaction: Interaction):
-        await self.bot.defer(interaction)
+        await self.bot.defer(interaction) #type: ignore
         if not self.is_vc_connected(interaction): return
         vc : VoiceClient = interaction.guild.voice_client # type: ignore
         message = "paused"
@@ -61,9 +59,9 @@ class Playback(commands.Cog):
             message = "Nothing was playing"
         await interaction.send(message)
     
-    @nextcord.slash_command(name="pause", description="Pauses a track if it's playing")
+    @nextcord.slash_command(name="resume", description="Pauses a track if it's playing")
     async def resume(self, interaction: Interaction):
-        await self.bot.defer(interaction)
+        await self.bot.defer(interaction) #type: ignore
         if not self.is_vc_connected(interaction): return
         vc : VoiceClient = interaction.guild.voice_client # type: ignore
         message = "resumed"
@@ -81,7 +79,7 @@ class Playback(commands.Cog):
     """
     @nextcord.slash_command(name="play", description="Find & play specified track", guild_ids=[])
     async def play_cmd(self, interaction: Interaction, q: str = SlashOption(name="query")):
-        await self.bot.defer(interaction)
+        await self.bot.defer(interaction) #type: ignore
         # should be able to search (later)
 
         # exemplar filepath

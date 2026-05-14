@@ -48,9 +48,11 @@ class Search(commands.Cog):
         return content
     
     async def pick_result(self, entries, message, interaction: Interaction) -> int:
-        """Waits for user to pick from the results. 
+        """
+        Waits for user to pick from the results. 
         Choice discarded if user takes too long to react.
-        Returns corresponging entries index number (provided user picks in time). """
+        Returns corresponging entries index number (provided user picks in time).
+        """
         content = ''
         # Add suggested reactions for each result
         for i in range(1, len(entries)+1):
@@ -65,9 +67,6 @@ class Search(commands.Cog):
             entry = entries[num-1]
             webpage_url = entry['webpage_url']
             print(f'Attempting to play: URL:{webpage_url} (num: {num})')
-            # await play_url_command(interaction=interaction, url=webpage_url, entry=entry) # just play the url.
-            print("Play url command not yet implemented")
-            # print("Smn else should be happening rn/")
             return num-1
     
         # Irrelevant reactions will stop the search. Should dedicate work to another function that gracefully handles irrelevant reactions without making the search useless.
@@ -75,24 +74,28 @@ class Search(commands.Cog):
             content = 'Invalid reaction'
             print(content)
             await interaction.send(content)
-            return -1
         
         except IndexError as e:
             print(content)
             content="You somehow reacted with a number too large or too small. Dumbass."
             await interaction.send(content) # what if the user sends a mistaken reaction. needs to be a more robust check.
-            return -1
     
         except asyncio.TimeoutError:
             content = 'request timed out'
             print(content)
             await interaction.send(content, delete_after=3.0)
             await message.delete(delay=5.0)
-            return -1
+        
+        except AssertionError as e:
+            print("Search Service was unsuccessful")
+            print(e)
+            await interaction.send('badeni was unable to process your request')
         
         except Exception as e:
             print("uknown error occuring")
             print(e)
+        
+        finally:
             return -1
 
     # Maybe that song length limit should be user_configurable
@@ -108,7 +111,14 @@ class Search(commands.Cog):
         content = self.user_results_msg(raw_results)
         msg = await interaction.send(content, ephemeral=False)
         choice = await self.pick_result(raw_results, msg, interaction)
-        await interaction.send(f'choice: {choice}')
+        if choice == -1:
+            await interaction.send('badeni couldn\'t process your request')
+            return
+        
+        # Start download if necessary
+        
+        
+    
         
        
        
